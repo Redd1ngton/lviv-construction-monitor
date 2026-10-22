@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Монітор забудови — Львівська область</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3b82f6;
+      --accent2: #10b981;
+      --border: #2a3548;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1rem 1.5rem;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 0.9rem; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    input[type="search"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      min-width: 220px;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button.secondary { background: #334155; }
+    button:hover { filter: brightness(1.1); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 70px);
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; height: auto; }
+      #map { height: 360px !important; }
+    }
+    .table-wrap {
+      overflow: auto;
+      padding: 0.5rem;
+      background: var(--bg);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      padding: 0.5rem 0.6rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--card);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    th:hover { color: var(--accent); }
+    tr:hover { background: rgba(59, 130, 246, 0.08); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    #map {
+      height: 100%;
+      min-height: 400px;
+      background: #1e293b;
+    }
+    .route-panel {
+      padding: 0.75rem 1rem;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      background: #1e3a5f;
+      font-size: 0.75rem;
+    }
+    .empty { color: var(--muted); padding: 2rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Монітор забудови · Львівська область</h1>
+      <div class="meta" id="meta">Завантаження даних…</div>
+    </div>
+    <div class="controls">
+      <input type="search" id="search" placeholder="Пошук за адресою, назвою, замовником…" />
+      <button id="btn-route" disabled>Побудувати маршрут</button>
+      <button class="secondary" id="btn-clear">Очистити вибір</button>
+      <a id="download-json" href="../data/constructions.json" download class="badge">JSON</a>
+      <a id="download-csv" href="../data/constructions.csv" download class="badge">CSV</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="_select">✓</th>
+            <th data-key="reg_date">Дата</th>
+            <th data-key="doc_number">Номер</th>
+            <th data-key="object_name">Об'єкт</th>
+            <th data-key="address">Адреса</th>
+            <th data-key="customer">Замовник</th>
+            <th data-key="status">Статус</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" style="display:none">Немає даних. Запустіть парсер і покладіть constructions.json у data/ або frontend/.</div>
+    </div>
+    <div style="display:flex; flex-direction:column;">
+      <div id="map"></div>
+      <div class="route-panel" id="route-panel">
+        Оберіть кілька об’єктів з координатами і натисніть «Побудувати маршрут».
+      </div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
