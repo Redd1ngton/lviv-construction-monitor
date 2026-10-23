@@ -5,7 +5,7 @@
   const stages = ['Підготовка', 'Встановлення', 'Перевірки', 'Збір карток', 'Публікація'];
   const labels = {starting: 'Підключення до реєстру', listing: 'Читання сторінки реєстру',
     coordinates: 'Отримання координат із карти реєстру', details: 'Обробка карток', saving: 'Збереження JSON і CSV', publishing: 'Публікація даних'};
-  let latestHeartbeat = null, liveRegion='lviv', regionJob=null;
+  let latestHeartbeat = null, liveRegion='lviv', regionJob=null, publishJob=null;
   let run = null, jobs = [], lastApi = 0, lastCheck = null, apiError = '', busy = false;
   const el = id => document.getElementById(id);
   async function get(url) {
@@ -27,7 +27,7 @@
     if (/setup-python|pip install/.test(name)) return 1;
     if (/unittest/.test(name)) return 2;
     if (/Collect and verify/.test(name)) return 3;
-    if (/Prepare standalone|Commit successful|Publish final/.test(name)) return 4;
+    if (/Prepare standalone|Commit successful|Publish final|Merge and publish/.test(name)) return 4;
     return -1;
   }
   function render(heartbeat) {
@@ -39,10 +39,11 @@
     const failed = completed && !success;
     const active = regionJob ? regionJob.status === 'in_progress' : run?.status === 'in_progress';
     const terminalHeartbeat = state && ['success', 'failure', 'cancelled'].includes(state.stage);
-    const title = success ? '✓ Завершено' : failed ? '⚠ ' + (run.conclusion === 'cancelled' ? 'Скасовано' : 'Помилка запуску') :
+    const publicationFailed=publishJob?.status==='completed' && publishJob.conclusion!=='success';
+    const title = publicationFailed ? '⚠ Помилка публікації даних' : success ? '✓ Завершено' : failed ? '⚠ ' + (run.conclusion === 'cancelled' ? 'Скасовано' : 'Помилка запуску') :
       active ? '● Працює' : run ? 'Очікує запуску' : apiError ? 'Стан недоступний' : 'Запусків ще немає';
     el('parser-state').textContent = title;
-    el('parser-state').dataset.kind = success ? 'success' : failed ? 'failure' : active ? 'active' : '';
+    el('parser-state').dataset.kind = publicationFailed ? 'failure' : success ? 'success' : failed ? 'failure' : active ? 'active' : '';
     if (run) el('parser-run').href = run.html_url;
     const statuses = stages.map(() => 'pending');
     for (const step of jobs) {
@@ -73,6 +74,7 @@
       if (failed && state.message) detail.push(state.message);
     } else if (active) detail.push('Збір триває. Детальні лічильники з’являться з наступного запуску.');
     if(regionJob && run?.status!=='completed' && completed)detail.push('Загальний набір публікується після завершення збору областей.');
+    if(publicationFailed)detail.push('Картки зібрано, але спільний набір не оновлено. Відкрийте журнал публікації.');
     if (failed) detail.push('Останні успішно збережені дані залишаються доступними. Причина — у журналі запуску.');
     if (apiError) detail.push('Не вдалося оновити стан GitHub. Показано останню отриману інформацію.');
     if (!run) detail.push(apiError ? 'Перевірте підключення або відкрийте журнал запусків.' : 'Щоденний запуск о 04:17 UTC.');
@@ -96,6 +98,7 @@
           const selectedRegion = document.getElementById('filter-region')?.value;
           const chosen = selectedRegion ? allJobs.find(job=>job.name.includes('('+selectedRegion+')')) : allJobs.find(job=>job.name.startsWith('scrape (') && job.status==='in_progress') || allJobs.find(job=>job.name.startsWith('scrape (')) || allJobs.find(job=>job.name==='scrape');
           liveRegion=selectedRegion || chosen?.name.match(/\(([^)]+)\)/)?.[1] || 'lviv';
+          publishJob=allJobs.find(job=>job.name==='publish') || null;
           regionJob=chosen || null;
           jobs = chosen?.steps || [];
           apiError = '';

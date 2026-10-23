@@ -127,24 +127,26 @@ jobs:
         with:
           pattern: region-*
           path: _artifacts
-      - name: Merge successful regions
+      - name: Merge and publish successful regions
         run: |
-          python scripts/merge_regions.py _artifacts
-          python - <<'PY'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git switch --detach origin/main
+            python scripts/merge_regions.py _artifacts
+            python - <<'PYTHON'
           import shutil
           from pathlib import Path
           output=Path('data/coordinate-caches');output.mkdir(parents=True,exist_ok=True)
           for path in Path('_artifacts').rglob('parcel_coordinates.json'):
               key=path.parent.name.removeprefix('region-')
               shutil.copyfile(path,output/(key+'.json'))
-          PY
-      - name: Commit successful update
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add data frontend/data.json frontend/data.csv
-          if ! git diff --cached --quiet; then
+          PYTHON
+            git add data frontend/data.json frontend/data.csv
+            if git diff --cached --quiet; then exit 0; fi
             git commit -m 'data: refresh construction aggregator by region'
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+            if git push origin HEAD:main; then exit 0; fi
+          done
+          echo 'Publication could not obtain a fast-forward after three attempts; region artifacts remain available.'
+          exit 1
