@@ -3,7 +3,9 @@
  * Читає constructions.json і показує таблицю + карту + простий маршрут
  */
 
+const REMOTE_DATA = "https://raw.githubusercontent.com/Redd1ngton/lviv-construction-monitor/main/data/";
 const DATA_URLS = [
+  REMOTE_DATA + "constructions.json",
   "./data.json",                    // якщо скопіювали в frontend/
   "../data/constructions.json",     // локально
   "/data/constructions.json",       // якщо Pages віддає з кореня
@@ -21,7 +23,11 @@ async function loadData() {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) continue;
       const data = await res.json();
-      items = data.items || data || [];
+      const loaded = Array.isArray(data) ? data : data.items;
+      if (!Array.isArray(loaded)) continue;
+      items = loaded;
+      document.getElementById("download-json").href = url;
+      document.getElementById("download-csv").href = url.endsWith("data.json") ? url.replace(/data\.json$/, "data.csv") : url.replace(/constructions\.json$/, "constructions.csv");
       document.getElementById("meta").textContent =
         `Оновлено: ${data.updated_at || "—"} · Записів: ${items.length} · ${data.region || "Львівська"}`;
       return true;
@@ -40,7 +46,7 @@ function filteredItems() {
   if (q) {
     list = list.filter(it => {
       const blob = [
-        it.doc_number, it.object_name, it.address, it.customer, it.status
+        it.doc_number, it.object_name, it.address, it.customer, it.status, it.doc_type
       ].join(" ").toLowerCase();
       return blob.includes(q);
     });
@@ -72,14 +78,15 @@ function renderTable() {
 
   for (const it of list) {
     const tr = document.createElement("tr");
-    const hasCoords = it.lat != null && it.lon != null;
+    const hasCoords = hasCoordinates(it);
     const checked = selected.has(it.doc_number) ? "checked" : "";
 
     tr.innerHTML = `
       <td><input type="checkbox" data-id="${escapeAttr(it.doc_number)}" ${checked} ${hasCoords ? "" : "disabled"} title="${hasCoords ? "Обрати для маршруту" : "Немає координат"}" /></td>
       <td>${escapeHtml(it.reg_date || "—")}</td>
-      <td><a href="${escapeAttr(it.detail_url || "#")}" target="_blank" rel="noopener">${escapeHtml(it.doc_number || "—")}</a></td>
+      <td><a href="${escapeAttr(safeUrl(it.detail_url))}" target="_blank" rel="noopener">${escapeHtml(it.doc_number || "—")}</a></td>
       <td>${escapeHtml(it.object_name || "—")}</td>
+      <td>${escapeHtml(it.doc_type || "—")}</td>
       <td>${escapeHtml(it.address || "—")}</td>
       <td>${escapeHtml(it.customer || "—")}</td>
       <td>${escapeHtml(it.status || "—")}</td>
@@ -100,6 +107,10 @@ function renderTable() {
 }
 
 function initMap() {
+  if (typeof L === "undefined") {
+    document.getElementById("map").textContent = "Карта недоступна. Таблиця працює.";
+    return;
+  }
   map = L.map("map").setView([49.84, 24.03], 9); // Львів
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap",
@@ -112,7 +123,7 @@ function initMap() {
 function updateMarkers() {
   if (!markersLayer) return;
   markersLayer.clearLayers();
-  const withCoords = items.filter(it => it.lat != null && it.lon != null);
+  const withCoords = filteredItems().filter(hasCoordinates);
   const bounds = [];
 
   for (const it of withCoords) {
@@ -128,7 +139,7 @@ function updateMarkers() {
       <strong>${escapeHtml(it.object_name || it.doc_number)}</strong><br/>
       ${escapeHtml(it.address || "")}<br/>
       <small>${escapeHtml(it.reg_date || "")}</small><br/>
-      <a href="${escapeAttr(it.detail_url || "#")}" target="_blank">Картка →</a>
+      <a href="${escapeAttr(safeUrl(it.detail_url))}" target="_blank" rel="noopener">Картка →</a>
     `);
     markersLayer.addLayer(marker);
     bounds.push([it.lat, it.lon]);
@@ -166,7 +177,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 function onBuildRoute() {
-  const selectedItems = items.filter(it => selected.has(it.doc_number) && it.lat != null);
+  const selectedItems = items.filter(it => selected.has(it.doc_number) && hasCoordinates(it));
   if (selectedItems.length < 2) {
     alert("Оберіть щонайменше 2 об’єкти з координатами");
     return;
@@ -180,7 +191,7 @@ function onBuildRoute() {
 
   // Лінія на карті
   const latlngs = route.map(r => [r.lat, r.lon]);
-  L.polyline(latlngs, { color: "#10b981", weight: 4, opacity: 0.8 }).addTo(markersLayer);
+  if (markersLayer) L.polyline(latlngs, { color: "#10b981", weight: 4, opacity: 0.8 }).addTo(markersLayer);
 
   // Текст
   const listHtml = route.map((r, i) =>
@@ -196,6 +207,16 @@ function onBuildRoute() {
     ${listHtml}<br/><br/>
     <a href="${gmapsUrl}" target="_blank" rel="noopener">Відкрити в Google Maps →</a>
   `;
+}
+
+function hasCoordinates(it) {
+  return Number.isFinite(it.lat) && Number.isFinite(it.lon) && Math.abs(it.lat) <= 90 && Math.abs(it.lon) <= 180;
+}
+function safeUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "e-construction.gov.ua" ? url.href : "#";
+  } catch (_) { return "#"; }
 }
 
 function escapeHtml(s) {
@@ -220,7 +241,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  document.getElementById("search").addEventListener("input", () => renderTable());
+  document.getElementById("search").addEventListener("input", () => { renderTable(); updateMarkers(); });
   document.getElementById("btn-route").addEventListener("click", onBuildRoute);
   document.getElementById("btn-clear").addEventListener("click", () => {
     selected.clear();
@@ -238,3 +259,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateMarkers();
   }
 });
+

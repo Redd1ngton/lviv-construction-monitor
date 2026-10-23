@@ -1,0 +1,42 @@
+name: Update construction registry
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['parser/**', '.github/workflows/daily-scrape.yml']
+permissions:
+  contents: write
+concurrency:
+  group: construction-registry
+  cancel-in-progress: false
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: parser/requirements.txt
+      - run: pip install -r parser/requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - name: Collect and verify registry
+        run: python -u parser/scrape.py --days 30 --max-pages 1000
+      - name: Prepare standalone frontend data
+        run: |
+          cp data/constructions.json frontend/data.json
+          cp data/constructions.csv frontend/data.csv
+      - name: Commit successful update
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/constructions.json data/constructions.csv frontend/data.json frontend/data.csv
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: refresh Lviv construction registry'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
