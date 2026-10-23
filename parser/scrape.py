@@ -13,6 +13,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from progress import snapshot
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -149,9 +150,18 @@ def main():
         response.encoding = 'utf-8'
         return response.text
     records, seen, page_signatures = [], set(), set()
+    processed = 0
+    snapshot('starting', processed=0, accepted=0, from_date=start, to_date=end)
     try:
         for page in range(1, args.max_pages + 1):
-            links, has_next = list_links(fetch(list_url(start, end, page)))
+            snapshot('listing', page=page, processed=processed, accepted=len(records))
+            html = fetch(list_url(start, end, page))
+            links, has_next = list_links(html)
+            soup = BeautifulSoup(html, 'html.parser')
+            count_node = soup.select_one('.opendata__top p')
+            count_match = re.search(r'[\d\s\u00a0]+', count_node.get_text()) if count_node else None
+            total = int(re.sub(r'\D', '', count_match.group())) if count_match and re.sub(r'\D', '', count_match.group()) else None
+            snapshot('listing', total=total)
             print(f'Page {page}: {len(links)} documents', flush=True)
             if not links:
                 raise RuntimeError('Empty registry response; previous dataset retained')
@@ -163,18 +173,23 @@ def main():
                 if url in seen:
                     continue
                 seen.add(url)
+                snapshot('details', current_url=url, processed=processed, accepted=len(records))
                 record = parse_detail(fetch(url), url)
+                processed += 1
                 if eligible(record, start, end):
                     records.append(record)
                 else:
                     print(f'Skip outside verified region/date/status: {record["doc_number"]}', flush=True)
+            snapshot('details', processed=processed, accepted=len(records))
             if not has_next:
                 break
         else:
             raise RuntimeError('Page limit reached; increase --max-pages. Dataset not replaced.')
         if not records:
             raise RuntimeError('No verified records; previous dataset retained')
+        snapshot('saving', processed=processed, accepted=len(records))
         save(records, args.output_dir, start, end)
+        snapshot('publishing', processed=processed, accepted=len(records))
         print(f'Saved {len(records)} verified records', flush=True)
     finally:
         session.close()

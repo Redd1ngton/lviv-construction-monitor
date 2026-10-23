@@ -117,6 +117,24 @@
       background: #1e3a5f;
       font-size: 0.75rem;
     }
+    body { min-height: 100dvh; display: flex; flex-direction: column; }
+    main { flex: 1; height: auto; min-height: 500px; }
+    .parser-panel { padding: .85rem 1.5rem; background: var(--card); border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .parser-top { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+    .parser-top button { margin-left: auto; font-size: .8rem; }
+    #parser-state { font-weight: 600; }
+    #parser-state[data-kind="success"] { color: #6ee7b7; }
+    #parser-state[data-kind="failure"] { color: #fda4af; }
+    #parser-state[data-kind="active"] { color: #93c5fd; }
+    .parser-steps { display: flex; flex-wrap: wrap; gap: .45rem; list-style: none; padding: 0; margin: .65rem 0; }
+    .parser-steps li { padding: .3rem .55rem; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
+    .parser-steps li[data-state="done"] { color: #6ee7b7; }
+    .parser-steps li[data-state="active"] { color: #bfdbfe; border-color: #60a5fa; background: #1e3a5f; }
+    .parser-steps li[data-state="failure"] { color: #fda4af; border-color: #fb7185; }
+    #parser-progress { width: 100%; height: .6rem; accent-color: var(--accent2); }
+    #parser-detail { overflow-wrap: anywhere; }
+    #parser-time { display: block; margin-top: .3rem; color: var(--muted); }
+    @media(max-width: 600px) { .parser-panel { padding: .75rem; } .parser-top button { margin-left: 0; } }
     .empty { color: var(--muted); padding: 2rem; text-align: center; }
   </style>
 </head>
@@ -135,6 +153,17 @@
     </div>
   </header>
 
+  <section class="parser-panel" aria-labelledby="parser-heading">
+    <div class="parser-top"><strong id="parser-heading">Збір даних</strong>
+      <span id="parser-state" role="status" aria-live="polite">Перевіряю стан…</span>
+      <a id="parser-run" href="https://github.com/Redd1ngton/lviv-construction-monitor/actions" target="_blank" rel="noopener">Журнал запуску ↗</a>
+      <button id="parser-refresh" class="secondary" type="button">Оновити статус</button>
+    </div>
+    <ol id="parser-steps" class="parser-steps" aria-label="Етапи збору"></ol>
+    <progress id="parser-progress" max="100" hidden aria-label="Прогрес обробки карток"></progress>
+    <div id="parser-detail">Завантажую стан останнього запуску.</div>
+    <small id="parser-time"></small>
+  </section>
   <main>
     <div class="table-wrap">
       <table>
@@ -164,6 +193,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
+  <script src="status.js"></script>
 </body>
 </html>
 

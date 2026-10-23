@@ -25,7 +25,9 @@ jobs:
       - run: pip install -r parser/requirements.txt
       - run: python -m unittest discover -s tests -v
       - name: Collect and verify registry
-        run: python -u parser/scrape.py --days 30 --max-pages 1000
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -u parser/progress.py
       - name: Prepare standalone frontend data
         run: |
           cp data/constructions.json frontend/data.json
@@ -40,3 +42,9 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+      - name: Publish final parser status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: python parser/progress.py --finish "$JOB_STATUS"

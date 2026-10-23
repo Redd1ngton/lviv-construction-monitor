@@ -1,8 +1,11 @@
 import importlib.util
 import json
 import tempfile
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'parser'))
 
 spec = importlib.util.spec_from_file_location('scrape', Path(__file__).resolve().parents[1] / 'parser/scrape.py')
 scrape = importlib.util.module_from_spec(spec)
