@@ -135,6 +135,25 @@
     #parser-detail { overflow-wrap: anywhere; }
     #parser-time { display: block; margin-top: .3rem; color: var(--muted); }
     @media(max-width: 600px) { .parser-panel { padding: .75rem; } .parser-top button { margin-left: 0; } }
+    .filters { display:flex; flex-wrap:wrap; gap:.65rem; padding:.8rem 1rem; align-items:end; border-bottom:1px solid var(--border); }
+    .filters label { display:grid; gap:.25rem; font-size:.75rem; color:var(--muted); flex:1 1 150px; }
+    select, input[type="date"], input[type="number"] { min-width:0; width:100%; padding:.55rem; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--text); font:inherit; }
+    #result-count { flex-basis:100%; font-size:.85rem; }
+    main { grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); align-items:start; }
+    .table-wrap { max-height:75vh; }
+    table { min-width:1050px; }
+    .map-column { min-width:0; position:sticky; top:0; }
+    #map { height:56vh; min-height:360px; }
+    .map-info, #pin-editor { padding:.7rem 1rem; font-size:.8rem; background:var(--card); }
+    .map-info p { margin:0 0 .3rem; }
+    #pin-editor label { display:inline-grid; gap:.2rem; width:45%; margin:.4rem .25rem .4rem 0; }
+    .small { font-size:.7rem; padding:.3rem .45rem; margin:.15rem .2rem .15rem 0; }
+    .location-label { font-size:.75rem; }
+    .map-dot { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; color:#fff; border:2px solid white; box-shadow:0 1px 6px #0008; font-weight:700; font-size:12px; }
+    .map-dot.approx { background:#b45309; }.map-dot.exact { background:#2563eb; }.map-dot.selected { background:#047857; border:3px solid #6ee7b7; }
+    .object-popup { color:#152032; }.object-popup p { margin:.4rem 0; }.popup-item { padding:.4rem 0; border-top:1px solid #d1d5db; }
+    .route-panel { max-height:300px; overflow:auto; }
+    @media(max-width:900px) { main { grid-template-columns:minmax(0,1fr); }.map-column { position:static; }.table-wrap { max-height:55vh; }.filters label { flex-basis:42%; } }
     .empty { color: var(--muted); padding: 2rem; text-align: center; }
   </style>
 </head>
@@ -164,6 +183,17 @@
     <div id="parser-detail">Завантажую стан останнього запуску.</div>
     <small id="parser-time"></small>
   </section>
+  <section class="filters" aria-label="Фільтри об’єктів">
+    <label>Населений пункт<select id="filter-town"><option value="">Усі населені пункти</option></select></label>
+    <label>Тип об’єкта (за назвою)<select id="filter-category"><option value="">Усі типи об’єктів</option></select></label>
+    <label>Тип документа<select id="filter-document"><option value="">Усі типи документів</option></select></label>
+    <label>Дата від<input id="filter-from" type="date"></label>
+    <label>Дата до<input id="filter-to" type="date"></label>
+    <label>Розташування<select id="filter-location"><option value="">Усі записи</option><option value="located">Є точка на карті</option><option value="exact">Точні / уточнені точки</option><option value="missing">Без точки</option></select></label>
+    <button id="btn-reset-filters" class="secondary">Скинути фільтри</button>
+    <button id="btn-select-visible" class="secondary">Обрати перші 10 на карті</button>
+    <div id="result-count" role="status" aria-live="polite"></div>
+  </section>
   <main>
     <div class="table-wrap">
       <table>
@@ -172,18 +202,26 @@
             <th data-key="_select">✓</th>
             <th data-key="reg_date">Дата</th>
             <th data-key="doc_number">Номер</th>
+            <th data-key="settlement">Населений пункт</th>
             <th data-key="object_name">Об'єкт</th>
             <th data-key="doc_type">Тип документа</th>
             <th data-key="address">Адреса</th>
             <th data-key="customer">Замовник</th>
-            <th data-key="status">Статус</th>
+            <th data-key="status">Статус</th><th>Карта</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
       <div class="empty" id="empty" style="display:none">Немає записів для цього пошуку або перший автоматичний збір ще не завершився.</div>
     </div>
-    <div style="display:flex; flex-direction:column;">
+    <div class="map-column">
+      <div class="map-info"><p id="map-count"></p><small id="map-note">Позиції з реєстру мають пріоритет. Приблизні точки позначено окремо.</small></div>
+      <form id="pin-editor" hidden>
+        <strong id="pin-heading"></strong><p id="pin-message"></p>
+        <label>Широта<input id="pin-lat" type="number" step="any" required></label>
+        <label>Довгота<input id="pin-lon" type="number" step="any" required></label>
+        <button type="submit">Зберегти точку</button><button id="pin-cancel" class="secondary" type="button">Скасувати</button>
+      </form>
       <div id="map"></div>
       <div class="route-panel" id="route-panel">
         Оберіть кілька об’єктів з координатами і натисніть «Побудувати маршрут».
@@ -192,8 +230,10 @@
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="geo.js"></script>
   <script src="app.js"></script>
   <script src="status.js"></script>
 </body>
 </html>
+
 

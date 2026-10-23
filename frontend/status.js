@@ -4,7 +4,7 @@
   const api = `https://api.github.com/repos/${repo}/actions`;
   const stages = ['Підготовка', 'Встановлення', 'Перевірки', 'Збір карток', 'Публікація'];
   const labels = {starting: 'Підключення до реєстру', listing: 'Читання сторінки реєстру',
-    details: 'Обробка карток', saving: 'Збереження JSON і CSV', publishing: 'Публікація даних'};
+    coordinates: 'Отримання координат із карти реєстру', details: 'Обробка карток', saving: 'Збереження JSON і CSV', publishing: 'Публікація даних'};
   let latestHeartbeat = null;
   let run = null, jobs = [], lastApi = 0, lastCheck = null, apiError = '', busy = false;
   const el = id => document.getElementById(id);
@@ -106,3 +106,4 @@
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 20000);
 })();
+
