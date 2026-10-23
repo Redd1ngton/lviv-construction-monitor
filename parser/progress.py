@@ -19,6 +19,7 @@ def snapshot(stage, **fields):
     now = datetime.now(timezone.utc).isoformat(timespec='seconds')
     previous.update(fields, stage=stage, updated_at=now)
     previous.setdefault('started_at', now)
+    previous['region'] = os.environ.get('PARSER_REGION', 'lviv')
     previous['run_id'] = os.environ.get('GITHUB_RUN_ID', 'local')
     previous['run_attempt'] = os.environ.get('GITHUB_RUN_ATTEMPT', '1')
     STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -42,14 +43,14 @@ def publish():
             response = session.post(f'{api}/git/refs', json={
                 'ref': 'refs/heads/parser-status', 'sha': os.environ['GITHUB_SHA']}, timeout=20)
         response.raise_for_status()
-        response = session.get(f'{api}/contents/status.json', params={'ref': 'parser-status'}, timeout=20)
+        response = session.get(f'{api}/contents/status-{os.environ.get("PARSER_REGION","lviv")}.json', params={'ref': 'parser-status'}, timeout=20)
         if response.status_code not in (200, 404):
             response.raise_for_status()
         payload = {'branch': 'parser-status', 'message': 'status: parser heartbeat',
                    'content': base64.b64encode(STATUS_PATH.read_bytes()).decode()}
         if response.status_code == 200:
             payload['sha'] = response.json()['sha']
-        session.put(f'{api}/contents/status.json', json=payload, timeout=20).raise_for_status()
+        session.put(f'{api}/contents/status-{os.environ.get("PARSER_REGION","lviv")}.json', json=payload, timeout=20).raise_for_status()
 
 
 def safe_publish():
@@ -73,7 +74,9 @@ def main():
     snapshot('starting', processed=0, accepted=0, page=0)
     safe_publish()
     child = subprocess.Popen([sys.executable, '-u', str(Path(__file__).with_name('scrape.py')),
-                              '--days', '30', '--max-pages', '1000'])
+                              '--days', os.environ.get('PARSER_DAYS', '7'), '--max-pages', '1000',
+                              '--region', os.environ.get('PARSER_REGION', 'lviv'),
+                              '--output-dir', os.environ.get('PARSER_OUTPUT', str(Path(__file__).resolve().parents[1] / 'data'))])
     last_publish = time.monotonic()
     while child.poll() is None:
         time.sleep(2)
@@ -90,3 +93,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

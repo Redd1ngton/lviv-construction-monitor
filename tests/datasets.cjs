@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),core=require('../frontend/datasets.js');
+const old=core.parse({updated_at:'2026-10-01',items:[{doc_number:'A',object_name:'Будинок',status:'Діючий'}]});
+const latest=core.parse({updated_at:'2026-10-08',items:[{doc_number:'A',object_name:'Будинок',status:'Скасований'},{doc_number:'B',object_name:'Склад'}]});
+assert.deepEqual(core.combine([latest,old],old,'new').map(row=>row.doc_number),['B']);
+assert.deepEqual(core.combine([old,latest],old,'changed').map(row=>row.doc_number),['A']);
+assert.equal(core.combine([old,latest],old,'all').length,2);
+assert.equal(core.combine([latest,old],old,'all').find(row=>row.doc_number==='A').status,'Скасований');
+assert.throws(()=>core.parse({items:[{object_name:'Без номера'}]}));
+assert.equal(core.parse({items:[{doc_number:'A'},{doc_number:'A'}]}).items.length,1);
+const imported=JSON.parse(JSON.stringify({format:'lviv-construction-snapshot/v1',...latest}));
+assert.equal(core.parse(imported).items.length,2);
+console.log('Multiple snapshots, deduplication, newest versions, new/changed records and reimport: passed');

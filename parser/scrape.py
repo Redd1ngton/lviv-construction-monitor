@@ -15,13 +15,14 @@ import requests
 from bs4 import BeautifulSoup
 from progress import snapshot
 from coordinates import extract, ParcelLookup
+from regions import REGIONS, region_of
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 BASE_URL = 'https://e-construction.gov.ua'
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
 FIELDS = ['doc_number', 'reg_date', 'object_name', 'address', 'customer', 'status',
-          'org_issuer', 'doc_type', 'lat', 'lon', 'coord_source', 'cadastral_numbers', 'location_description', 'detail_url']
+          'org_issuer', 'doc_type', 'region', 'region_key', 'lat', 'lon', 'coord_source', 'cadastral_numbers', 'location_description', 'detail_url']
 
 
 def clean(value):
@@ -76,6 +77,9 @@ def list_links(html):
     soup = BeautifulSoup(html, 'html.parser')
     container = soup.select_one('.datasets__list')
     if container is None:
+        count = soup.select_one('.opendata__top p')
+        if count and re.fullmatch(r'0\s+(?:записів|записи|запис)', clean(count.get_text(' ', strip=True))):
+            return [], False
         raise ValueError('Registry list missing (layout change or access denied)')
     links = list(dict.fromkeys(urljoin(BASE_URL, a['href']) for a in
                               container.select('a[href*="document_detail/doc_id="]')))
@@ -86,14 +90,14 @@ def list_links(html):
     return links, bool(next_page)
 
 
-def list_url(start, end, page):
+def list_url(start, end, page, region="lviv"):
     # Codes verified against the registry's /api-user/filter-list endpoint.
-    filters = f'1061_Львівська,1060_1,1057_{start}_{end}'
+    filters = f'1061_{REGIONS[region]},1060_1,1057_{start}_{end}'
     return f'{BASE_URL}/document/optype=100/filter={quote(filters, safe=",_-")}/page={page}'
 
 
-def eligible(record, start, end):
-    return (bool(re.search(r'Львівська\s+(?:обл|область)', record['address'], re.I))
+def eligible(record, start, end, region="lviv"):
+    return (region_of(record['address']) == region
             and bool(record['reg_date']) and start <= record['reg_date'] <= end
             and record['status'] == 'Діючий')
 
@@ -105,7 +109,7 @@ def atomic_write(path, content):
     os.replace(temp, path)
 
 
-def save(records, output, start, end):
+def save(records, output, start, end, region="lviv"):
     path = output / 'constructions.json'
     old = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'items': []}
     merged = {r['doc_number']: r for r in old['items']}
@@ -113,7 +117,7 @@ def save(records, output, start, end):
         merged[record['doc_number']] = record
     ordered = sorted(merged.values(), key=lambda r: (r.get('reg_date') or '', r['doc_number']), reverse=True)
     payload = dict(updated_at=datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                   region='Львівська область', count=len(ordered), items=ordered,
+                   region=REGIONS[region], region_key=region, count=len(ordered), items=ordered,
                    last_run=dict(from_date=start, to_date=end, collected=len(records)),
                    note='Архів спостережень. Статус актуальний на момент останнього збору картки.')
     stream = io.StringIO(newline='')
@@ -129,6 +133,7 @@ def save(records, output, start, end):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--region', choices=REGIONS, default='lviv')
     parser.add_argument('--days', type=int, default=30)
     parser.add_argument('--from-date')
     parser.add_argument('--to-date')
@@ -136,6 +141,7 @@ def main():
     parser.add_argument('--delay', type=float, default=1.2)
     parser.add_argument('--output-dir', type=Path, default=DATA_DIR)
     args = parser.parse_args()
+    os.environ['PARSER_REGION'] = args.region
     if args.days < 1 or args.max_pages < 1 or args.delay < 0:
         parser.error('days/max-pages must be positive; delay must be nonnegative')
     end = date.fromisoformat(args.to_date) if args.to_date else date.today()
@@ -160,7 +166,7 @@ def main():
     try:
         for page in range(1, args.max_pages + 1):
             snapshot('listing', page=page, processed=processed, accepted=len(records))
-            html = fetch(list_url(start, end, page))
+            html = fetch(list_url(start, end, page, args.region))
             links, has_next = list_links(html)
             soup = BeautifulSoup(html, 'html.parser')
             count_node = soup.select_one('.opendata__top p')
@@ -169,6 +175,10 @@ def main():
             snapshot('listing', total=total)
             print(f'Page {page}: {len(links)} documents', flush=True)
             if not links:
+                if page == 1 and re.search(r'\b0\s+(?:запис|документ)', soup.get_text(' ', strip=True)):
+                    save([], args.output_dir, start, end, args.region)
+                    snapshot('publishing', processed=0, accepted=0)
+                    return
                 raise RuntimeError('Empty registry response; previous dataset retained')
             signature = tuple(links)
             if signature in page_signatures or all(url in seen for url in links):
@@ -180,8 +190,10 @@ def main():
                 seen.add(url)
                 snapshot('details', current_url=url, processed=processed, accepted=len(records))
                 record = parse_detail(fetch(url), url)
+                record['region_key'] = region_of(record['address'])
+                record['region'] = REGIONS.get(record['region_key'], '')
                 processed += 1
-                if eligible(record, start, end):
+                if eligible(record, start, end, args.region):
                     if record.get('lat') is None and record.get('cadastral_numbers'):
                         snapshot('coordinates', processed=processed, accepted=len(records))
                         record.update(parcel_lookup.resolve(record['cadastral_numbers']))
@@ -196,7 +208,7 @@ def main():
         if not records:
             raise RuntimeError('No verified records; previous dataset retained')
         snapshot('saving', processed=processed, accepted=len(records))
-        save(records, args.output_dir, start, end)
+        save(records, args.output_dir, start, end, args.region)
         snapshot('publishing', processed=processed, accepted=len(records))
         print(f'Saved {len(records)} verified records', flush=True)
     finally:

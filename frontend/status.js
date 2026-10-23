@@ -5,7 +5,7 @@
   const stages = ['Підготовка', 'Встановлення', 'Перевірки', 'Збір карток', 'Публікація'];
   const labels = {starting: 'Підключення до реєстру', listing: 'Читання сторінки реєстру',
     coordinates: 'Отримання координат із карти реєстру', details: 'Обробка карток', saving: 'Збереження JSON і CSV', publishing: 'Публікація даних'};
-  let latestHeartbeat = null;
+  let latestHeartbeat = null, liveRegion='lviv', regionJob=null;
   let run = null, jobs = [], lastApi = 0, lastCheck = null, apiError = '', busy = false;
   const el = id => document.getElementById(id);
   async function get(url) {
@@ -34,10 +34,10 @@
     const sameRun = run && heartbeat && String(heartbeat.run_id) === String(run.id) &&
       String(heartbeat.run_attempt || '1') === String(run.run_attempt || '1');
     const state = sameRun ? heartbeat : null;
-    const completed = run?.status === 'completed';
-    const success = completed && run.conclusion === 'success';
+    const completed = regionJob ? regionJob.status === 'completed' : run?.status === 'completed';
+    const success = completed && (regionJob?.conclusion || run.conclusion) === 'success';
     const failed = completed && !success;
-    const active = run?.status === 'in_progress';
+    const active = regionJob ? regionJob.status === 'in_progress' : run?.status === 'in_progress';
     const terminalHeartbeat = state && ['success', 'failure', 'cancelled'].includes(state.stage);
     const title = success ? '✓ Завершено' : failed ? '⚠ ' + (run.conclusion === 'cancelled' ? 'Скасовано' : 'Помилка запуску') :
       active ? '● Працює' : run ? 'Очікує запуску' : apiError ? 'Стан недоступний' : 'Запусків ще немає';
@@ -61,6 +61,7 @@
       return li;
     }));
     const detail = [];
+    if(regionJob) { const option=[...(document.getElementById('filter-region')?.options || [])].find(option=>option.value===liveRegion); detail.push('Область: '+(option?.textContent || liveRegion)); }
     if (run) detail.push(`Запуск №${run.run_number} · Початок: ${date(run.run_started_at || run.created_at)}`);
     if (state) {
       if (!completed) detail.push(labels[state.stage] || (terminalHeartbeat ? 'Завершення запуску' : 'Оновлення стану'));
@@ -71,6 +72,7 @@
         detail.push('⚠ Понад 5 хвилин без нових даних. Перевірте журнал запуску.');
       if (failed && state.message) detail.push(state.message);
     } else if (active) detail.push('Збір триває. Детальні лічильники з’являться з наступного запуску.');
+    if(regionJob && run?.status!=='completed' && completed)detail.push('Загальний набір публікується після завершення збору областей.');
     if (failed) detail.push('Останні успішно збережені дані залишаються доступними. Причина — у журналі запуску.');
     if (apiError) detail.push('Не вдалося оновити стан GitHub. Показано останню отриману інформацію.');
     if (!run) detail.push(apiError ? 'Перевірте підключення або відкрийте журнал запусків.' : 'Щоденний запуск о 04:17 UTC.');
@@ -90,18 +92,25 @@
           const data = await get(`${api}/runs?per_page=5`);
           const runs = data.workflow_runs.filter(r => r.path === '.github/workflows/daily-scrape.yml');
           run = runs.find(r => r.status === 'in_progress') || runs[0] || null;
-          jobs = run ? (await get(`${api}/runs/${run.id}/jobs`)).jobs.flatMap(j => j.steps || []) : [];
+          const allJobs = run ? (await get(`${api}/runs/${run.id}/jobs?per_page=100`)).jobs : [];
+          const selectedRegion = document.getElementById('filter-region')?.value;
+          const chosen = selectedRegion ? allJobs.find(job=>job.name.includes('('+selectedRegion+')')) : allJobs.find(job=>job.name.startsWith('scrape (') && job.status==='in_progress') || allJobs.find(job=>job.name.startsWith('scrape (')) || allJobs.find(job=>job.name==='scrape');
+          liveRegion=selectedRegion || chosen?.name.match(/\(([^)]+)\)/)?.[1] || 'lviv';
+          regionJob=chosen || null;
+          jobs = chosen?.steps || [];
           apiError = '';
         } catch (error) { apiError = error.message; }
         lastApi = Date.now();
       }
       try {
-        latestHeartbeat = await get(`https://raw.githubusercontent.com/${repo}/parser-status/status.json?t=${Math.floor(Date.now() / 20000)}`);
+        latestHeartbeat = await get(`https://raw.githubusercontent.com/${repo}/parser-status/status-${liveRegion}.json?t=${Math.floor(Date.now() / 20000)}`);
       } catch (_) { /* Existing runs may not yet have a progress snapshot. */ }
       lastCheck = new Date().toISOString();
       render(latestHeartbeat);
     } finally { busy = false; el('parser-refresh').disabled = false; }
   }
+  document.getElementById('filter-region')?.addEventListener('change',()=>{lastApi=0;latestHeartbeat=null;refresh(true);});
+  document.addEventListener('collection-change',()=>{lastApi=0;latestHeartbeat=null;refresh();});
   el('parser-refresh').addEventListener('click', () => refresh(true));
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 20000);

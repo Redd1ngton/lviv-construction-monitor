@@ -3,18 +3,70 @@ on:
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
+    inputs:
+      regions:
+        description: 'Коди обраних регіонів через кому (наприклад lviv,odesa). Порожньо — збережений розклад.'
+        default: ''
+        type: string
+      confirm_country:
+        description: 'Підтверджую одноразовий збір усієї України'
+        default: false
+        type: boolean
+      days:
+        description: 'Період збору в днях (1–90)'
+        default: '7'
+        type: string
   push:
     branches: [main]
-    paths: ['parser/**', '.github/workflows/daily-scrape.yml']
+    paths: ['parser/**', '.github/workflows/daily-scrape.yml', 'scripts/merge_regions.py']
 permissions:
   contents: write
 concurrency:
   group: construction-registry
   cancel-in-progress: false
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      regions: ${{ steps.matrix.outputs.regions }}
+      days: ${{ steps.matrix.outputs.days }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: matrix
+        env:
+          INPUT_REGIONS: ${{ inputs.regions || '' }}
+          CONFIRM_COUNTRY: ${{ inputs.confirm_country || false }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DAYS: ${{ inputs.days || '7' }}
+        run: |
+          python - <<'PY'
+          import json,os,sys
+          sys.path.insert(0,'parser')
+          from regions import select_regions
+          from pathlib import Path
+          config=json.loads(Path('parser/collection.json').read_text())
+          raw=os.environ['INPUT_REGIONS'].strip()
+          keys=select_regions(raw,config['regions'],confirmed=os.environ['CONFIRM_COUNTRY']=='true',manual=os.environ['EVENT_NAME']=='workflow_dispatch')
+          days=int(os.environ['INPUT_DAYS'])
+          if not 1<=days<=90: raise SystemExit('Оберіть 1–90 днів')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+              output.write('regions='+json.dumps(keys)+'\n')
+              output.write('days='+str(days)+'\n')
+          PY
   scrape:
+    needs: prepare
+    name: scrape (${{ matrix.region }})
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        region: ${{ fromJSON(needs.prepare.outputs.regions) }}
     runs-on: ubuntu-latest
     timeout-minutes: 330
+    env:
+      PARSER_REGION: ${{ matrix.region }}
+      PARSER_DAYS: ${{ needs.prepare.outputs.days }}
+      PARSER_OUTPUT: _collect/${{ matrix.region }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,28 +77,74 @@ jobs:
       - run: pip install -r parser/requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: node tests/frontend.cjs
+      - run: node tests/datasets.cjs
+      - run: node tests/collection.cjs
+      - run: node tests/snapshots.cjs
+      - name: Restore region history
+        run: |
+          python - <<'PY'
+          import os,shutil
+          from pathlib import Path
+          output=Path(os.environ['PARSER_OUTPUT']);output.mkdir(parents=True,exist_ok=True)
+          key=os.environ['PARSER_REGION'];source=Path('data/regions')/(key+'.json')
+          if not source.exists() and key=='lviv': source=Path('data/constructions.json')
+          if source.exists():
+              import json,sys
+              sys.path.insert(0,'parser')
+              from regions import region_of
+              payload=json.loads(source.read_text())
+              payload['items']=[row for row in payload['items'] if region_of(row.get('address',''))==key]
+              (output/'constructions.json').write_text(json.dumps(payload,ensure_ascii=False))
+          cache=Path('data/coordinate-caches')/(key+'.json')
+          if cache.exists(): shutil.copyfile(cache,output/'parcel_coordinates.json')
+          PY
       - name: Collect and verify registry
         env:
           GH_TOKEN: ${{ github.token }}
         run: python -u parser/progress.py
-      - name: Prepare standalone frontend data
-        run: |
-          cp data/constructions.json frontend/data.json
-          cp data/constructions.csv frontend/data.csv
-      - name: Commit successful update
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add data frontend/data.json frontend/data.csv
-          if ! git diff --cached --quiet; then
-            git commit -m 'data: refresh Lviv construction registry'
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: region-${{ matrix.region }}
+          path: _collect/${{ matrix.region }}
+          retention-days: 14
       - name: Publish final parser status
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
         run: python parser/progress.py --finish "$JOB_STATUS"
-
+  publish:
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    needs: [prepare, scrape]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r parser/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: region-*
+          path: _artifacts
+      - name: Merge successful regions
+        run: |
+          python scripts/merge_regions.py _artifacts
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          output=Path('data/coordinate-caches');output.mkdir(parents=True,exist_ok=True)
+          for path in Path('_artifacts').rglob('parcel_coordinates.json'):
+              key=path.parent.name.removeprefix('region-')
+              shutil.copyfile(path,output/(key+'.json'))
+          PY
+      - name: Commit successful update
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data frontend/data.json frontend/data.csv
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: refresh construction aggregator by region'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi

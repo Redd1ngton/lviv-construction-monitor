@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def valid(lat, lon):
-    return isinstance(lat, (float, int)) and isinstance(lon, (float, int)) and 48 <= lat <= 51 and 22 <= lon <= 26.5
+    return isinstance(lat, (float, int)) and isinstance(lon, (float, int)) and 44 <= lat <= 53 and 22 <= lon <= 41
 
 
 def point(payload):

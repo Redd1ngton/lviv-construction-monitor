@@ -27,21 +27,31 @@
   function index(places) {
     const result = new Map();
     for (const place of places) for (const name of new Set(place.names.map(norm))) {
-      if (!result.has(name)) result.set(name, []);
-      result.get(name).push(place);
+      const key=(place.region_key || 'lviv')+'|'+name;
+      if (!result.has(key)) result.set(key, []);
+      result.get(key).push(place);
     }
     return result;
   }
   function locate(item, lookup) {
-    const candidates = lookup.get(norm(item.settlement)) || [];
-    const narrowed = item.district ? candidates.filter(p => norm(p.district) === norm(item.district)) : candidates;
+    const candidates = lookup.get((item.region_key || 'lviv')+'|'+norm(item.settlement)) || [];
+    const narrowed = item.district && candidates.length > 1 ? candidates.filter(p => norm(p.district) === norm(item.district)) : candidates;
     if (!narrowed.length) return null;
     // Duplicate gazetteer entries within ~500 m represent the same locality.
     const p = narrowed[0];
     if (narrowed.some(other => Math.abs(other.lat-p.lat) > .003 || Math.abs(other.lon-p.lon) > .005)) return null;
     return {lat:p.lat, lon:p.lon, coord_source:'settlement', geoname_id:p.id};
   }
-  const api = {norm, settlement, district, category, index, locate};
+  function region(address, regions) {
+    const text=norm(address);
+    for(const [key,name] of Object.entries(regions)) {
+      if(['kyiv-city','sevastopol'].includes(key)) {if(new RegExp('(?:^|[,;]\\s*)(?:м\\.?|місто)\\s*'+norm(name)+'(?:$|[,\\s])').test(text))return key;}
+      else if(key==='crimea'){if(/крим|арк/.test(text))return key;}
+      else if(text.includes(norm(name)+' обл'))return key;
+    }
+    return '';
+  }
+  const api = {region, norm, settlement, district, category, index, locate};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ConstructionGeo = api;
 })(typeof window === 'undefined' ? globalThis : window);

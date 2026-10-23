@@ -10,7 +10,7 @@ class CoordinatesTests(unittest.TestCase):
     def test_registry_centroid_order(self):
         self.assertEqual(point({'centroid':{'coordinates':[49.8,23.95]}})['lat'],49.8)
         self.assertEqual(point({'centroid':{'coordinates':[23.95,49.8]}})['lat'],49.8)
-        self.assertIsNone(point({'centroid':{'coordinates':[49.16,33.69]}}))
+        self.assertIsNone(point({'centroid':{'coordinates':[55.16,43.69]}}))
 
     def test_cadastral_link_default_center_is_not_object_position(self):
         html = '<a href="https://map.land.gov.ua/?cc=3750399.38328253,6300642.82793137&cadnum=4623683300:05:000:0318">4623683300:05:000:0318</a>'

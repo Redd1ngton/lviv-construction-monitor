@@ -13,6 +13,8 @@ class Element {
  set innerHTML(value){this.html=value;}
  get innerHTML(){return this.html||'';}
  scrollIntoView(){}
+ setAttribute(name,value){this[name]=value;}
+ get options(){return this.children;}
 }
 const elements={},listeners={},groups=[];let polylineCount=0;
 const byId=id=>elements[id]??=new Element();
@@ -22,20 +24,25 @@ const fixtures=[
  {doc_number:'two',reg_date:'2026-10-21',address:'Львівська обл., Львівський район, с. Скнилів',object_name:'Будівництво складу',doc_type:'Дозвіл',lat:null,lon:null},
  {doc_number:'three',reg_date:'2026-10-20',address:'Львівська обл., Львівський район, м. Львів',object_name:'Будівництво магазину',doc_type:'Дозвіл',lat:49.84,lon:24.03},
 ];
-const context={ConstructionGeo:geo,Option:function(text,value){this.text=text;this.value=value},localStorage:{getItem(){return null},setItem(){}},document:{getElementById:byId,createElement:()=>new Element(),querySelectorAll:()=>[],addEventListener:(name,cb)=>listeners[name]=cb},AbortController,setTimeout,clearTimeout,URL,URLSearchParams,console,alert(){},fetch:async url=>({ok:true,json:async()=>url.includes('places.json')?JSON.parse(fs.readFileSync(__dirname+'/../frontend/places.json')):{items:fixtures}}),L:{map:()=>({setView(){return this},on(){},fitBounds(){}}),tileLayer:()=>({addTo(){}}),layerGroup:group,divIcon:x=>x,marker:(p)=>({bindPopup(){return this},getLatLng(){return {lat:p[0],lng:p[1]}},openPopup(){}}),polyline:()=>({addTo(){polylineCount++}})}};
-vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/../frontend/app.js','utf8'),context);
+const context={ConstructionGeo:geo,Option:function(text,value){this.text=text;this.value=value},localStorage:{getItem(){return null},setItem(){}},document:{readyState:'loading',getElementById:byId,createElement:()=>new Element(),querySelectorAll:()=>[],addEventListener:(name,cb)=>listeners[name]=cb},AbortController,setTimeout,clearTimeout,URL,URLSearchParams,console,alert(){},fetch:async url=>({ok:true,json:async()=>url.includes('regions.json')?JSON.parse(fs.readFileSync(__dirname+'/../frontend/regions.json')):url.includes('/places/')?JSON.parse(fs.readFileSync(__dirname+'/../frontend/places/lviv.json')):{items:fixtures}}),L:{map:()=>({setView(){return this},on(){},fitBounds(){}}),tileLayer:()=>({addTo(){}}),layerGroup:group,divIcon:x=>x,marker:(p)=>({bindPopup(){return this},getLatLng(){return {lat:p[0],lng:p[1]}},openPopup(){}}),polyline:()=>({addTo(){polylineCount++}})}};
+context.window=context;
+vm.createContext(context);
+let appSource=fs.readFileSync(__dirname+'/../frontend/app.js','utf8').replace("if(document.readyState==='loading')","window.testEval=code=>eval(code); if(document.readyState==='loading')");
+vm.runInContext(appSource,context);
+const call=code=>vm.runInContext('testEval('+JSON.stringify(code)+')',context);
 (async()=>{
  listeners.DOMContentLoaded();await new Promise(resolve=>setTimeout(resolve,20));
  assert.equal(groups[0].layers.length,2,'Objects at the same place form one marker');
- byId('filter-town').value='Скнилів';vm.runInContext('refresh()',context);
- assert.equal(vm.runInContext('filteredItems().length',context),2);
- byId('filter-category').value='Склади / логістика';vm.runInContext('refresh()',context);
- assert.equal(vm.runInContext('filteredItems()[0].doc_number',context),'two');
- byId('filter-category').value='';vm.runInContext("toggleSelection('one',true);toggleSelection('two',true);onBuildRoute()",context);
+ byId('filter-town').value='Скнилів';call('refresh()');
+ assert.equal(call('filteredItems().length'),2);
+ byId('filter-category').value='Склади / логістика';call('refresh()');
+ assert.equal(call('filteredItems()[0].doc_number'),'two');
+ byId('filter-category').value='';call("toggleSelection('one',true);toggleSelection('two',true);onBuildRoute()");
  assert.equal(byId('btn-route').disabled,false);assert.equal(polylineCount,1);
  assert(byId('route-panel').innerHTML.includes('центри населених пунктів'));
- byId('filter-town').value='Львів';vm.runInContext('refresh()',context);assert.equal(byId('btn-route').disabled,true,'Hidden stops removed');
- vm.runInContext("startPin(items[2])",context);byId('pin-lat').value='49.85';byId('pin-lon').value='24.04';
- vm.runInContext('savePin({preventDefault(){}})',context);assert.equal(vm.runInContext('items[2].coord_source',context),'manual');
- console.log('Settlement matching, filters, markers, route, hidden selection and manual pin: passed');
+ byId('filter-town').value='Львів';call('refresh()');assert.equal(byId('btn-route').disabled,false,'Stops retained across filters and tabs');
+ call("startPin(items[2])");byId('pin-lat').value='49.85';byId('pin-lon').value='24.04';
+ call('savePin({preventDefault(){}})');assert.equal(call('items[2].coord_source'),'manual');
+ const late={...context,document:{...context.document,readyState:'complete'}};late.window=late;late.L=undefined;vm.createContext(late);vm.runInContext(appSource,late);await new Promise(resolve=>setTimeout(resolve,20));assert(late.ConstructionApp,'App starts after DOMContentLoaded as well');
+ console.log('Settlement matching, filters, cross-tab route selection and manual pin: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

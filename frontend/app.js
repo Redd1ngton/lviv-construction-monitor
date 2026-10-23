@@ -1,6 +1,19 @@
+(() => {
 const REMOTE_DATA = 'https://raw.githubusercontent.com/Redd1ngton/lviv-construction-monitor/main/data/';
 const DATA_URLS = [REMOTE_DATA + 'constructions.json', './data.json', '../data/constructions.json'];
-const geo = ConstructionGeo;
+const geo = window.ConstructionGeo;
+if (!geo) { document.getElementById("meta").textContent="Не завантажився модуль застосунку. Оновіть сторінку."; return; }
+let placeLookup = new Map(), regionNames={}, placeRows=[], viewVersion=0;
+const placeRequests=new Map();
+const regionsReady=fetchJson('./regions.json').then(value=>{regionNames=value;return value;}).catch(()=>{regionNames={lviv:'Львівська'};return regionNames;});
+async function ensurePlaces(rows) {
+  await regionsReady;
+  const keys=new Set(rows.map(row=>row.region_key || geo.region(row.address,regionNames)).filter(Boolean));
+  await Promise.allSettled([...keys].map(key=>{
+    if(!placeRequests.has(key))placeRequests.set(key,fetchJson('./places/'+key+'.json').then(data=>{placeRows.push(...data.places);placeLookup=geo.index(placeRows);}));
+    return placeRequests.get(key);
+  }));
+}
 let items = [], selected = new Set(), sortKey = 'reg_date', sortDir = -1;
 let map, markersLayer, routeLayer, pinTarget = null;
 let overrides = {};
@@ -17,41 +30,73 @@ async function fetchJson(url) {
   finally { clearTimeout(timer); }
 }
 async function loadData() {
-  let lookup = new Map();
-  try { lookup = geo.index((await fetchJson('./places.json')).places); }
-  catch (_) { $('map-note').textContent = 'Довідник населених пунктів недоступний. Можна встановити точки вручну.'; }
   for (const url of DATA_URLS) {
     try {
       const data = await fetchJson(url), rows = Array.isArray(data) ? data : data.items;
       if (!Array.isArray(rows)) continue;
-      items = rows.map(row => {
-        const it = {...row, settlement:geo.settlement(row.address), district:geo.district(row.address), object_category:geo.category(row.object_name)};
-        it.original_coords = hasCoordinates(it) ? {lat:it.lat, lon:it.lon} : null;
-        const approximate = !hasCoordinates(it) && geo.locate(it, lookup);
-        if (approximate) Object.assign(it, approximate);
-        it.base_coords = {lat:it.lat, lon:it.lon, coord_source:it.coord_source};
-        if (hasCoordinates(overrides[it.doc_number] || {})) Object.assign(it, overrides[it.doc_number], {coord_source:'manual'});
-        return it;
-      });
+      await setData(rows, `Поточний парсер · Записів: ${rows.length}`);
       $('meta').textContent = `Оновлено: ${data.updated_at ? new Date(data.updated_at).toLocaleString('uk-UA') : '—'} · Записів: ${items.length}`;
       $('download-json').href = url;
       $('download-csv').href = url.endsWith('data.json') ? url.replace(/data\.json$/, 'data.csv') : url.replace(/constructions\.json$/, 'constructions.csv');
-      populateFilters(); refresh(); return;
+      if (window.DatasetManager) window.DatasetManager.setLive({...data, items:rows});
+      return;
     } catch (error) { console.warn('Data unavailable', url, error); }
   }
   $('meta').textContent = 'Не вдалося завантажити дані. Спробуйте оновити сторінку.';
   refresh();
 }
+function prepareItems(rows) {
+  return rows.map(row => {
+        const it = {...row, region_key:row.region_key || geo.region(row.address,regionNames), settlement:geo.settlement(row.address), district:geo.district(row.address), object_category:geo.category(row.object_name)};
+        it.original_coords = hasCoordinates(it) ? {lat:it.lat, lon:it.lon} : null;
+        const approximate = !hasCoordinates(it) && geo.locate(it, placeLookup);
+        if (approximate) Object.assign(it, approximate);
+        it.base_coords = {lat:it.lat, lon:it.lon, coord_source:it.coord_source};
+        if (hasCoordinates(overrides[it.doc_number] || {})) Object.assign(it, overrides[it.doc_number], {coord_source:'manual'});
+        return it;
+      });
+}
+async function setData(rows, label) {
+  const version=++viewVersion;
+  await ensurePlaces(rows);
+  if(version!==viewVersion)return;
+  const previous = {};
+  for (const id of ['filter-region','filter-town','filter-category','filter-document']) previous[id]=$(id).value;
+  items = prepareItems(rows);
+  const available = new Set(items.map(it=>it.doc_number));
+  selected = new Set([...selected].filter(id=>available.has(id)));
+  populateFilters();
+  for (const [id,value] of Object.entries(previous)) if ([...$(id).options].some(o=>o.value===value)) $(id).value=value;
+  $('dataset-label').textContent=label;
+  refresh();
+}
+window.ConstructionApp={setData, refresh};
 function populateFilters() {
-  for (const [id,key,empty] of [['filter-town','settlement','Усі населені пункти'],['filter-category','object_category','Усі типи об’єктів'],['filter-document','doc_type','Усі типи документів']]) {
-    const counts = new Map();
+  for (const [id,key,empty] of [['filter-region','region_key','Усі області'],['filter-town','settlement','Усі населені пункти'],['filter-category','object_category','Усі типи об’єктів'],['filter-document','doc_type','Усі типи документів']]) {
+    const counts = new Map(key==='region_key'?Object.keys(regionNames).map(key=>[key,0]):[]);
     for (const it of items) { const value = it[key] || 'Не визначено'; counts.set(value, (counts.get(value) || 0) + 1); }
-    $(id).replaceChildren(new Option(empty, ''), ...[...counts].sort((a,b)=>a[0].localeCompare(b[0],'uk')).map(([value,count]) => new Option(`${value} (${count})`,value)));
+    $(id).replaceChildren(new Option(empty, ''), ...[...counts].sort((a,b)=>a[0].localeCompare(b[0],'uk')).map(([value,count]) => new Option(`${key==='region_key'?(regionNames[value] || value):value} (${count})`,value)));
+  }
+}
+function renderTabs() {
+  const counts=new Map();for(const it of items)counts.set(it.object_category,(counts.get(it.object_category)||0)+1);
+  const tabs=$('category-tabs');tabs.replaceChildren();
+  for(const [value,label] of [['',`Усі (${items.length})`],...[...counts].sort((a,b)=>a[0].localeCompare(b[0],'uk')).map(([name,count])=>[name,`${name} (${count})`])]) {
+    const button=document.createElement('button');button.type='button';button.setAttribute('role','tab');button.setAttribute('aria-selected',String($('filter-category').value===value));button.className=$('filter-category').value===value?'tab active':'tab';button.textContent=label;
+    button.addEventListener('click',()=>{$('filter-category').value=value;refresh();});tabs.appendChild(button);
+  }
+}
+function renderSelection() {
+  const tray=$('selected-stops');tray.replaceChildren();
+  for(const it of items.filter(it=>selected.has(it.doc_number))) {
+    const entry=document.createElement('span');entry.className='selected-stop';
+    const text=document.createElement('span');text.textContent=`${it.settlement||'Об’єкт'} · ${it.doc_number}`;entry.appendChild(text);
+    addButton(entry,'Прибрати',()=>toggleSelection(it.doc_number,false));tray.appendChild(entry);
   }
 }
 function filteredItems() {
   const q = geo.norm($('search').value), town = $('filter-town').value;
-  return items.filter(it => (!town || (it.settlement || 'Не визначено') === town) &&
+  return items.filter(it => (!window.CollectionManager || window.CollectionManager.selectedKeys.has(it.region_key)) && (!$('filter-region').value || it.region_key === $('filter-region').value) && (!town || (it.settlement || 'Не визначено') === town) &&
     (!$('filter-category').value || it.object_category === $('filter-category').value) &&
     (!$('filter-document').value || (it.doc_type || 'Не визначено') === $('filter-document').value) &&
     (!$('filter-from').value || (it.reg_date && it.reg_date >= $('filter-from').value)) &&
@@ -61,16 +106,15 @@ function filteredItems() {
     .sort((a,b) => String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''), 'uk') * sortDir);
 }
 function refresh(fit = true) {
-  // Selections always correspond to the visible result, preventing hidden route stops.
-  const visible = new Set(filteredItems().map(it=>it.doc_number));
-  selected = new Set([...selected].filter(id=>visible.has(id)));
-  clearRoute(); renderTable(); updateMarkers(fit); updateCounts();
+  clearRoute(); renderTable(); renderTabs(); updateMarkers(fit); updateCounts();
 }
 function updateCounts() {
   const list = filteredItems(), located = list.filter(hasCoordinates).length;
   $('result-count').textContent = `Знайдено: ${list.length} із ${items.length} · На карті: ${located} · Без точки: ${list.length - located} · Обрано: ${selected.size}`;
   $('btn-route').disabled = selected.size < 2;
+  renderSelection();
   $('btn-select-visible').disabled = !located;
+  $('selection-count').textContent = `Спільний маршрут: ${selected.size} / 10. Вибір зберігається при зміні вкладок і фільтрів.`;
   $('map-count').textContent = `${located} об’єктів на карті. Помаранчеві точки — центри населених пунктів, сині — точні / уточнені точки. Число на точці означає кількість об’єктів.`;
 }
 function renderTable() {
@@ -81,7 +125,7 @@ function renderTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" aria-label="Обрати ${escapeAttr(it.doc_number)}" ${selected.has(it.doc_number)?'checked':''} ${hasCoordinates(it)?'':'disabled'}></td>
       <td>${escapeHtml(it.reg_date || '—')}</td>
-      <td><a href="${escapeAttr(safeUrl(it.detail_url))}" target="_blank" rel="noopener">${escapeHtml(it.doc_number)}</a></td>
+      <td><a href="${escapeAttr(safeUrl(it.detail_url))}" target="_blank" rel="noopener">${escapeHtml(it.doc_number)}</a>${it.comparison==='new'?'<br><span class="badge">Новий</span>':it.comparison==='changed'?'<br><span class="badge">Змінено</span>':''}</td>
       <td><strong>${escapeHtml(it.settlement || 'Не визначено')}</strong><br><small>${escapeHtml(it.district ? it.district + ' район' : '')}</small></td>
       <td>${escapeHtml(it.object_name || '—')}<br><span class="badge">${escapeHtml(it.object_category)}</span></td>
       <td>${escapeHtml(it.doc_type || '—')}</td><td>${escapeHtml(it.address || '—')}${it.location_description ? '<br><small>'+escapeHtml(it.location_description)+'</small>' : ''}</td>
@@ -104,7 +148,7 @@ function toggleSelection(id,on) {
 }
 function initMap() {
   if(typeof L === 'undefined') { $('map').textContent='Карта недоступна. Перевірте інтернет і оновіть сторінку.';return; }
-  map=L.map('map').setView([49.84,24.03],9);
+  map=L.map('map').setView([49,31],6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap · населені пункти: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0)',maxZoom:19}).addTo(map);
   markersLayer=L.layerGroup().addTo(map);routeLayer=L.layerGroup().addTo(map);
   map.on('click',event=>{ if(pinTarget){$('pin-lat').value=event.latlng.lat.toFixed(6);$('pin-lon').value=event.latlng.lng.toFixed(6);$('pin-message').textContent='Точку обрано. Натисніть «Зберегти точку».';} });
@@ -150,7 +194,7 @@ function startPin(it) {
 function savePin(event) {
   event.preventDefault();if(!pinTarget)return;
   const lat=Number($('pin-lat').value),lon=Number($('pin-lon').value);
-  if(!$('pin-lat').value || !$('pin-lon').value || !hasCoordinates({lat,lon}) || lat<47 || lat>52 || lon<22 || lon>27){$('pin-message').textContent='Введіть коректні координати у Львівській області та поблизу неї.';return;}
+  if(!$('pin-lat').value || !$('pin-lon').value || !hasCoordinates({lat,lon}) || lat<44 || lat>53 || lon<22 || lon>41){$('pin-message').textContent='Введіть коректні координати в межах України.';return;}
   overrides[pinTarget.doc_number]={lat,lon};
   try{localStorage.setItem('construction-pins-v1',JSON.stringify(overrides));}catch(_){$('pin-message').textContent='Не вдалося зберегти. Дозвольте збереження даних у браузері.';return;}
   Object.assign(pinTarget,{lat,lon,coord_source:'manual'});pinTarget=null;$('pin-editor').hidden=true;refresh(false);
@@ -171,7 +215,7 @@ function buildRoute(points) {
 }
 function clearRoute(){if(routeLayer)routeLayer.clearLayers();$('route-panel').textContent='Оберіть 2–10 об’єктів у таблиці або на карті. Для приблизних точок спочатку перевірте адресу.';}
 function onBuildRoute() {
-  const route=buildRoute(filteredItems().filter(it=>selected.has(it.doc_number)&&hasCoordinates(it)));
+  const route=buildRoute(items.filter(it=>selected.has(it.doc_number)&&hasCoordinates(it)));
   if(route.length<2)return;
   clearRoute();let km=0;for(let i=1;i<route.length;i++)km+=haversine(route[i-1].lat,route[i-1].lon,route[i].lat,route[i].lon);
   if(routeLayer){L.polyline(route.map(it=>[it.lat,it.lon]),{color:'#10b981',weight:4,dashArray:'7 6'}).addTo(routeLayer);map.fitBounds(route.map(it=>[it.lat,it.lon]),{padding:[32,32],maxZoom:15});}
@@ -180,15 +224,19 @@ function onBuildRoute() {
   if(route.length>2)params.set('waypoints',route.slice(1,-1).map(it=>`${it.lat},${it.lon}`).join('|'));
   $('route-panel').innerHTML=`<strong>Порядок об’їзду · ${km.toFixed(1)} км по прямій</strong><p>${approximate?'Увага: частина точок — центри населених пунктів. Це маршрут між ними, а не до конкретних будівель. Уточніть точки для точного виїзду.':'Точки уточнено. Пунктир показує порядок відвідування, а не дороги.'}</p><ol>${route.map(it=>`<li>${escapeHtml(it.doc_number)} · ${escapeHtml(it.settlement || '')} · ${escapeHtml(it.address)} <small>(${escapeHtml(coordLabel(it))})</small></li>`).join('')}</ol><a href="https://www.google.com/maps/dir/?${escapeAttr(params)}" target="_blank" rel="noopener">Прокласти автомобільний маршрут у Google Maps ↗</a><p><small>Google Maps може обмежувати кількість проміжних зупинок у мобільному браузері.</small></p>`;
 }
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('leaflet-ready',()=>{if(!map){try{initMap();updateMarkers();}catch(error){console.warn(error);}}});
+function init(){
   document.querySelectorAll('th[data-key]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.key;if(key==='_select')return;if(sortKey===key)sortDir*=-1;else{sortKey=key;sortDir=key==='reg_date'?-1:1;}renderTable();}));
   $('search').addEventListener('input',()=>refresh());
-  for(const id of ['filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).addEventListener('change',()=>refresh());
-  $('btn-reset-filters').addEventListener('click',()=>{for(const id of ['search','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).value='';refresh();});
+  for(const id of ['filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).addEventListener('change',()=>refresh());
+  $('btn-reset-filters').addEventListener('click',()=>{for(const id of ['search','filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).value='';refresh();});
   $('btn-clear').addEventListener('click',()=>{selected.clear();refresh(false);});
-  $('btn-select-visible').addEventListener('click',()=>{selected=new Set(filteredItems().filter(hasCoordinates).slice(0,10).map(it=>it.doc_number));clearRoute();renderTable();updateCounts();updateMarkers(false);});
+  $('btn-select-visible').addEventListener('click',()=>{for (const it of filteredItems().filter(hasCoordinates)) { if(selected.size>=10)break; selected.add(it.doc_number); }clearRoute();renderTable();updateCounts();updateMarkers(false);});
   $('btn-route').addEventListener('click',onBuildRoute);
   $('pin-editor').addEventListener('submit',savePin);
   $('pin-cancel').addEventListener('click',()=>{pinTarget=null;$('pin-editor').hidden=true;});
-  initMap();loadData();
-});
+  loadData();
+  try { initMap(); } catch(error) { $('map-note').textContent='Карта не завантажилася. Фільтри, знімки та вибір працюють.'; console.warn(error); }
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();

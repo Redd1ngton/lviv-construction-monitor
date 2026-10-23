@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Монітор забудови — Львівська область</title>
+  <title>Агрегатор будівництв України</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
@@ -135,6 +135,27 @@
     #parser-detail { overflow-wrap: anywhere; }
     #parser-time { display: block; margin-top: .3rem; color: var(--muted); }
     @media(max-width: 600px) { .parser-panel { padding: .75rem; } .parser-top button { margin-left: 0; } }
+    .snapshots-panel { padding:.8rem 1rem; background:var(--card); border-bottom:1px solid var(--border); font-size:.85rem; }
+    .snapshots-panel summary { cursor:pointer; font-weight:600; margin-bottom:.7rem; }
+    .snapshot-controls { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem; }
+    .snapshot-controls label { display:grid; gap:.3rem; max-width:350px; }
+    .snapshot-controls label:last-child { display:block; }
+    .snapshot-row { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; padding:.3rem 0; border-bottom:1px solid var(--border); }
+    .snapshot-row label { display:flex; align-items:center; gap:.5rem; }
+    #snapshot-list { margin-top:.6rem; max-height:180px; overflow:auto; }
+    .collection-panel { margin:.5rem 1rem; padding:.75rem; border:1px solid var(--border); border-radius:8px; font-size:.85rem; }
+    .collection-panel summary { cursor:pointer; font-weight:600; }.collection-actions { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+    .collection-actions label { display:grid; gap:.2rem; }.collection-actions input { padding:.4rem; background:var(--bg); color:var(--text); border:1px solid var(--border); }
+    .region-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:.4rem; margin:.7rem 0; }
+    .region-checks label { display:flex; gap:.4rem; align-items:center; padding:.25rem; }
+    .collection-note { padding:0 1rem; font-size:.8rem; color:var(--muted); }
+    .dataset-label { padding:.6rem 1rem 0; color:var(--muted); font-size:.8rem; }
+    .category-tabs { display:flex; flex-wrap:wrap; gap:.4rem; padding:.6rem 1rem; }
+    .category-tabs .tab { background:var(--card); color:var(--muted); border:1px solid var(--border); font-size:.8rem; }
+    .category-tabs .tab.active { background:#1e3a5f; color:#dbeafe; border-color:#60a5fa; }
+    .route-selection { padding:.6rem 1rem; background:var(--card); font-size:.8rem; }
+    #selected-stops { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.3rem; }
+    .selected-stop { display:inline-flex; align-items:center; gap:.25rem; border:1px solid #166534; padding:.2rem .4rem; border-radius:6px; }
     .filters { display:flex; flex-wrap:wrap; gap:.65rem; padding:.8rem 1rem; align-items:end; border-bottom:1px solid var(--border); }
     .filters label { display:grid; gap:.25rem; font-size:.75rem; color:var(--muted); flex:1 1 150px; }
     select, input[type="date"], input[type="number"] { min-width:0; width:100%; padding:.55rem; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--text); font:inherit; }
@@ -160,7 +181,7 @@
 <body>
   <header>
     <div>
-      <h1>Монітор забудови · Львівська область</h1>
+      <h1>Агрегатор будівництв України</h1>
       <div class="meta" id="meta">Завантаження даних…</div>
     </div>
     <div class="controls">
@@ -183,7 +204,33 @@
     <div id="parser-detail">Завантажую стан останнього запуску.</div>
     <small id="parser-time"></small>
   </section>
+  <details class="snapshots-panel" open>
+    <summary>Знімки парсингу та порівняння</summary>
+    <div class="snapshot-controls">
+      <button type="button" id="snapshot-save" disabled>Зберегти поточний збір у JSON</button>
+      <label class="import-label">Імпортувати JSON-файли<input id="snapshot-import" type="file" accept=".json,application/json" multiple></label>
+      <label>Показувати<select id="snapshot-mode"><option value="live">Поточний парсер</option><option value="all">Усі обрані результати разом</option><option value="new">Лише нові відносно знімка</option><option value="changed">Лише змінені записи</option></select></label>
+      <label>Порівняти зі знімком<select id="snapshot-baseline"><option value="">Оберіть попередній знімок</option></select></label>
+      <label><input id="snapshot-include-live" type="checkbox" checked> Додавати актуальний парсер до порівняння</label>
+    </div>
+    <div id="snapshot-list"></div><p id="snapshot-message" role="status" aria-live="polite">Можна імпортувати кілька JSON-файлів. Номери документів використовуються для порівняння.</p>
+    <small>Знімки залишаються у цьому браузері. JSON-файл дозволяє відкрити їх через тиждень або на іншому пристрої.</small>
+  </details>
+  <details class="collection-panel" open>
+    <summary>Регіони збору та пошуку</summary>
+    <p>Відмітьте потрібні області. Щоденний збір за замовчуванням — лише Львівська область. Збір усієї України потребує окремого підтвердження.</p>
+    <div class="collection-actions"><button type="button" id="collection-all" class="secondary">Обрати всі</button><button type="button" id="collection-clear" class="secondary">Зняти всі</button><strong id="collection-count"></strong></div>
+    <div id="region-checks" class="region-checks"></div>
+    <div class="collection-actions"><label>Коди для запуску<input id="collection-codes" readonly></label><button type="button" id="collection-copy">Скопіювати вибір</button><a id="collection-launch" href="https://github.com/Redd1ngton/lviv-construction-monitor/actions/workflows/daily-scrape.yml" target="_blank" rel="noopener">Відкрити запуск обраних регіонів ↗</a></div>
+    <p id="collection-message" role="status">Для запуску: скопіюйте вибір → відкрийте GitHub → Run workflow → вставте коди в regions. Змінювати щоденний розклад можна у parser/collection.json.</p>
+  </details>
+  <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
+  <div id="category-tabs" class="category-tabs" role="tablist" aria-label="Типи об’єктів"></div>
+  <section class="route-selection" aria-label="Обрані для маршруту">
+    <strong id="selection-count">Спільний маршрут: 0 / 10</strong><div id="selected-stops"></div>
+  </section>
   <section class="filters" aria-label="Фільтри об’єктів">
+    <select id="filter-region" hidden aria-label="Активна область"><option value="">Кілька регіонів</option></select>
     <label>Населений пункт<select id="filter-town"><option value="">Усі населені пункти</option></select></label>
     <label>Тип об’єкта (за назвою)<select id="filter-category"><option value="">Усі типи об’єктів</option></select></label>
     <label>Тип документа<select id="filter-document"><option value="">Усі типи документів</option></select></label>
@@ -191,7 +238,7 @@
     <label>Дата до<input id="filter-to" type="date"></label>
     <label>Розташування<select id="filter-location"><option value="">Усі записи</option><option value="located">Є точка на карті</option><option value="exact">Точні / уточнені точки</option><option value="missing">Без точки</option></select></label>
     <button id="btn-reset-filters" class="secondary">Скинути фільтри</button>
-    <button id="btn-select-visible" class="secondary">Обрати перші 10 на карті</button>
+    <button id="btn-select-visible" class="secondary">Додати видимі до маршруту (до 10)</button>
     <div id="result-count" role="status" aria-live="polite"></div>
   </section>
   <main>
@@ -229,10 +276,13 @@
     </div>
   </main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="geo.js"></script>
-  <script src="app.js"></script>
-  <script src="status.js"></script>
+  <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
+  <script defer src="geo.js?v=20261023-5"></script>
+  <script defer src="datasets.js?v=20261023-5"></script>
+  <script defer src="collection.js?v=20261023-5"></script>
+  <script defer src="app.js?v=20261023-5"></script>
+  <script defer src="snapshots.js?v=20261023-5"></script>
+  <script defer src="status.js?v=20261023-5"></script>
 </body>
 </html>
 
