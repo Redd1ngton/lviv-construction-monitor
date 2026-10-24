@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-10-23T11:53:21+00:00",
+  "updated_at": "2026-10-24T09:00:28+00:00",
   "region": "Україна",
-  "count": 690,
+  "count": 693,
   "items": [
     {
       "doc_number": "ЛВ051261023700",
@@ -84,6 +84,26 @@
       "region": "Львівська"
     },
     {
+      "doc_number": "ІУ051261023540",
+      "reg_date": "2026-10-23",
+      "object_name": "Нове будівництво індивідуального житлового будинку, господарських будівель і споруд на вул. В. Стефаника, 102 в с. Соснівка, Львівського району Львівської області",
+      "address": "Львівська обл., Львівський район, Давидівська територіальна громада, с. Соснівка (станом на 01.01.2021)",
+      "customer": "Фізична особа",
+      "status": "Діючий",
+      "org_issuer": "Державна інспекція архітектури та містобудування України. Зареєстровано автоматично програмними засобами ЄДЕССБ",
+      "doc_type": "Повідомлення про початок виконання будівельних робіт",
+      "lat": null,
+      "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623688200:02:003:0034"
+      ],
+      "location_description": "вул. В. Стефаника, 102",
+      "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4014314318811105180/optype=100",
+      "region_key": "lviv",
+      "region": "Львівська"
+    },
+    {
       "doc_number": "ІУ051261023534",
       "reg_date": "2026-10-23",
       "object_name": "Нове будівництво житлового будинку блокованого типу на вул. Західна бічна в с. Зимна Вода Львівського району Львівської області",
@@ -104,6 +124,26 @@
       "region": "Львівська"
     },
     {
+      "doc_number": "ІУ051261023368",
+      "reg_date": "2026-10-23",
+      "object_name": "Нове будівництво садибного будинку за адресою: Львівська область, Львівський район, с. Зубра",
+      "address": "Львівська обл., Львівський район, Солонківська територіальна громада, с. Зубра (станом на 01.01.2021)",
+      "customer": "Фізична особа",
+      "status": "Діючий",
+      "org_issuer": "Державна інспекція архітектури та містобудування України. Зареєстровано автоматично програмними засобами ЄДЕССБ",
+      "doc_type": "Повідомлення про початок виконання будівельних робіт",
+      "lat": null,
+      "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683300:05:000:0316"
+      ],
+      "location_description": "4623683300:05:000:0316",
+      "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4014352423920338598/optype=100",
+      "region_key": "lviv",
+      "region": "Львівська"
+    },
+    {
       "doc_number": "ІУ051261023305",
       "reg_date": "2026-10-23",
       "object_name": "Будівництво індивідуального житлового будинку та гаражу",
@@ -114,6 +154,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623085400:01:006:0146"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4014056120753587432/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -129,7 +174,32 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4622787200:22:000:0040"
+      ],
+      "location_description": "на земельній ділянці із кадастровим номером 4622787200:22:000:0040",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4014111086654522446/optype=100",
+      "region_key": "lviv",
+      "region": "Львівська"
+    },
+    {
+      "doc_number": "ІУ051261023225",
+      "reg_date": "2026-10-23",
+      "object_name": "Нове будівництво садибного будинку за адресою: Львівська область, Львівський район, с. Зубра",
+      "address": "Львівська обл., Львівський район, Солонківська територіальна громада, с. Зубра (станом на 01.01.2021)",
+      "customer": "Фізична особа",
+      "status": "Діючий",
+      "org_issuer": "Державна інспекція архітектури та містобудування України. Зареєстровано автоматично програмними засобами ЄДЕССБ",
+      "doc_type": "Повідомлення про початок виконання будівельних робіт",
+      "lat": null,
+      "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683300:05:000:0326"
+      ],
+      "location_description": "4623683300:05:000:0326",
+      "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4014378443780130096/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
     },
@@ -210,6 +280,11 @@
       "doc_type": "Реєстрація декларації про готовність до експлуатації об’єкта, за рішенням суду",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4625382400:01:017:0051"
+      ],
+      "location_description": "гараж",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013320156406089175/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -245,6 +320,11 @@
       "doc_type": "Реєстрація декларації про готовність до експлуатації об’єкта",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623681800:03:002:0014"
+      ],
+      "location_description": "кад. № 4623681800:03:002:0014, с. Кугаїв",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013487975441630252/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -340,6 +420,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623682000:02:002:0345"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013458595617178776/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -355,6 +440,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4622155400:01:001:0346"
+      ],
+      "location_description": "в межах населеного пункту",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013611632977512255/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -390,6 +480,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623910100:01:003:0142"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013446365907518705/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -445,6 +540,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623688200:01:003:0789"
+      ],
+      "location_description": "вул. Т. Шевченка, 42-В",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013607886440629946/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -460,6 +560,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623686600:05:000:0041"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013551054401570300/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -475,6 +580,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623686600:02:001:0670"
+      ],
+      "location_description": "приватна ділянка",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013421356111628173/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -490,6 +600,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623685100:02:001:0667"
+      ],
+      "location_description": "вул. Лісова, 28-Д",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4013610703159035701/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -605,6 +720,11 @@
       "doc_type": "Реєстрація декларації про готовність до експлуатації об’єкта",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623681600:01:011:0791"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4012087005780378795/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -698,6 +818,11 @@
       "doc_type": "Реєстрація декларації про готовність до експлуатації об’єкта",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623681600:01:011:0789"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4012126666498245797/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -773,6 +898,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683100:01:003:0081"
+      ],
+      "location_description": "вул. Собенка Василя, 174",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4012642927397307819/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -868,6 +998,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4621286300:01:002:0704"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4012865007749432968/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -923,6 +1058,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4622782300:06:000:0211"
+      ],
+      "location_description": "Львівська обл., Жовківський р., с/рада. Грибовицька, \"Сонячний\" садівничий кооператив",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4012658695522485308/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -978,6 +1118,9 @@
       "doc_type": "Видача дозволу на виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [],
+      "location_description": "вулиця Лесі Українки",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4011396538029836069/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -993,6 +1136,11 @@
       "doc_type": "Видача дозволу на виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4611200000:04:006:0002"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4009065632300533013/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -1028,6 +1176,11 @@
       "doc_type": "Реєстрація декларації про готовність до експлуатації об’єкта за амністією",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4625888600:03:000:1121"
+      ],
+      "location_description": "-",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4008628105181660577/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -1802,6 +1955,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623685100:01:001:1102"
+      ],
+      "location_description": "вул. Симона Петлюри, 71-В",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4011453772336203269/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -1817,6 +1975,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4624287200:01:001:1167"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4011205422236043111/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -2047,6 +2210,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683500:01:001:0707"
+      ],
+      "location_description": "кадастровий номер 4623683500:01:001:0707",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4011453168499033864/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -2122,6 +2290,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623610100:07:000:0389"
+      ],
+      "location_description": "Садове товариство \"Вікторія\"",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4011209595232978567/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -2157,6 +2330,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683400:01:001:1803"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4008657878289220799/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -2172,6 +2350,15 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623682800:02:002:3103",
+        "4623682800:02:002:0102",
+        "4623682800:02:002:0101",
+        "4623682800:02:002:3104",
+        "4623682800:02:002:3102"
+      ],
+      "location_description": "",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4007113757435102913/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -2328,6 +2515,11 @@
       "doc_type": "Повідомлення про початок виконання будівельних робіт",
       "lat": null,
       "lon": null,
+      "coord_source": null,
+      "cadastral_numbers": [
+        "4623683300:01:001:1142"
+      ],
+      "location_description": "в кварталі малоповерхової забудови, кадастровий номер земельної ділянки: 4623683300:01:001:1142",
       "detail_url": "https://e-construction.gov.ua/document_detail/doc_id=4008630830371964300/optype=100",
       "region_key": "lviv",
       "region": "Львівська"
@@ -11369,8 +11561,8 @@
     {
       "key": "lviv",
       "name": "Львівська",
-      "count": 608,
-      "updated_at": "2026-10-23T11:53:03+00:00"
+      "count": 619,
+      "updated_at": "2026-10-24T09:00:08+00:00"
     }
   ]
 }
