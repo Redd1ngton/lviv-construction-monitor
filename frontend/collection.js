@@ -3,7 +3,7 @@
   try{const old=JSON.parse(localStorage.getItem('construction-regions-v1')||'null');if(Array.isArray(old))selected=new Set(old);}catch(_){}
   let regions={};
   const byId=id=>document.getElementById(id);
-  const manager={get selectedKeys(){return selected;}};
+  const manager={get selectedKeys(){return selected;},reset(keys=['lviv']){selected=new Set(keys.filter(key=>key in regions));draw();}};
   window.CollectionManager=manager;
   function update(){
     try{localStorage.setItem('construction-regions-v1',JSON.stringify([...selected]));}catch(_){}

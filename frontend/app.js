@@ -117,8 +117,21 @@ function filteredItems() {
     (!q || geo.norm([it.doc_number,it.object_name,it.address,it.customer,it.status,it.doc_type,it.settlement,it.object_category,it.location_description,it.full_address,it.street_address,...(it.cadastral_numbers || [])].join(' ')).includes(q)))
     .sort((a,b) => String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''), 'uk') * sortDir);
 }
+function resetFilters() {
+  for(const id of ['search','filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).value='';
+  const available=[...new Set(items.map(it=>it.region_key).filter(Boolean))];
+  if(window.CollectionManager?.reset)window.CollectionManager.reset(available.includes('lviv')?['lviv']:available.slice(0,1));
+  refresh();
+}
+function filterSummary() {
+  const keys=window.CollectionManager?[...window.CollectionManager.selectedKeys]:[];
+  const text=['Області: '+(window.CollectionManager?(keys.length?keys.map(key=>regionNames[key]||key).join(', '):'не обрані'):'усі завантажені')];
+  if($('search').value.trim())text.push('Пошук: '+$('search').value.trim());
+  for(const [id,label] of [['filter-town','Населений пункт'],['filter-category','Тип об’єкта'],['filter-document','Документ'],['filter-from','Від'],['filter-to','До'],['filter-location','Розташування']])if($(id).value)text.push(label+': '+$(id).value);
+  if($('active-filters'))$('active-filters').textContent=text.join(' · ');
+}
 function refresh(fit = true) {
-  clearRoute(); renderTable(); renderTabs(); updateMarkers(fit); updateCounts();
+  filterSummary(); clearRoute(); renderTable(); renderTabs(); updateMarkers(fit); updateCounts();
 }
 function updateCounts() {
   const list = filteredItems(), located = list.filter(hasCoordinates).length;
@@ -132,7 +145,9 @@ function updateCounts() {
 function renderTable() {
   const list = filteredItems(), tbody = $('tbody'); tbody.replaceChildren();
   $('empty').style.display = list.length ? 'none' : 'block';
-  $('empty').textContent = 'Нічого не знайдено. Змініть або скиньте фільтри.';
+  $('btn-empty-reset').hidden = Boolean(list.length) || !items.length;
+  const scope=window.CollectionManager?.selectedKeys;
+  $('empty').textContent = scope && !scope.size ? 'Не обрано жодної області. Відмітьте регіон або натисніть «Скинути всі фільтри».' : scope && items.length && !items.some(it=>scope.has(it.region_key)) ? 'Для обраних областей немає завантажених записів. Оберіть інший регіон або запустіть збір.' : 'Нічого не знайдено за активними фільтрами. Натисніть «Скинути всі фільтри».';
   for (const it of list) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" aria-label="Обрати ${escapeAttr(it.doc_number)}" ${selected.has(it.doc_number)?'checked':''} ${hasCoordinates(it)?'':'disabled'}></td>
@@ -243,7 +258,8 @@ function init(){
   document.querySelectorAll('th[data-key]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.key;if(key==='_select')return;if(sortKey===key)sortDir*=-1;else{sortKey=key;sortDir=key==='reg_date'?-1:1;}renderTable();}));
   $('search').addEventListener('input',()=>refresh());
   for(const id of ['filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).addEventListener('change',()=>refresh());
-  $('btn-reset-filters').addEventListener('click',()=>{for(const id of ['search','filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).value='';refresh();});
+  $('btn-reset-filters').addEventListener('click',resetFilters);
+  $('btn-empty-reset').addEventListener('click',resetFilters);
   $('btn-clear').addEventListener('click',()=>{selected.clear();refresh(false);});
   $('btn-select-visible').addEventListener('click',()=>{for (const it of filteredItems().filter(hasCoordinates)) { if(selected.size>=10)break; selected.add(it.doc_number); }clearRoute();renderTable();updateCounts();updateMarkers(false);});
   $('btn-route').addEventListener('click',onBuildRoute);

@@ -185,8 +185,10 @@ def main():
                     return
                 raise RuntimeError('Empty registry response; previous dataset retained')
             signature = tuple(links)
-            if signature in page_signatures or all(url in seen for url in links):
-                raise RuntimeError('Pagination repeated a page; refusing partial publication')
+            # A moving registry can repeat previously observed cards on its final page.
+            # The explicit absence of a Next link is authoritative termination.
+            if has_next and signature in page_signatures:
+                raise RuntimeError('Pagination repeated a non-final page; refusing partial publication')
             page_signatures.add(signature)
             for url in links:
                 if url in seen:

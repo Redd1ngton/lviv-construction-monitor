@@ -25,21 +25,22 @@
   function currentHeartbeat(){return heartbeat && run && String(heartbeat.run_id)===String(run.id) && String(heartbeat.run_attempt||1)===String(run.run_attempt||1)?heartbeat:null;}
   function clock(){
     const state=currentHeartbeat(),parts=[];
-    if(run?.run_started_at){const ended=publishJob?.completed_at||(run.status==='completed'?run.updated_at:null);const seconds=Math.max(0,Math.floor(((ended?Date.parse(ended):Date.now())-Date.parse(run.run_started_at))/1000));if(Number.isFinite(seconds))parts.push(`${ended?'Тривалість':'Від початку'}: ${Math.floor(seconds/60)} хв ${seconds%60} с`);}
+    if(run?.run_started_at){const ended=(regionJob?.conclusion==='failure'?regionJob.completed_at:null)||publishJob?.completed_at||(run.status==='completed'?run.updated_at:null);const seconds=Math.max(0,Math.floor(((ended?Date.parse(ended):Date.now())-Date.parse(run.run_started_at))/1000));if(Number.isFinite(seconds))parts.push(`${ended?'Тривалість':'Від початку'}: ${Math.floor(seconds/60)} хв ${seconds%60} с`);}
     if(state?.updated_at){const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(state.updated_at))/1000));if(Number.isFinite(seconds))parts.push(`Остання активність: ${seconds} с тому`);}
     if($('parser-age'))$('parser-age').textContent=parts.join(' · ');
   }
   function render(){
     const state=currentHeartbeat(),published=publishJob?.conclusion==='success';
-    const publishFailed=publishJob?.status==='completed'&&!['success','skipped'].includes(publishJob.conclusion);
-    const failed=publishFailed || ['failure','cancelled'].includes(state?.stage) || (regionJob?.status==='completed'&&!['success','skipped'].includes(regionJob.conclusion));
-    const finished=published || (!publishJob&&run?.status==='completed'&&run.conclusion==='success');
+    const collectionFailed=['failure','cancelled'].includes(regionJob?.conclusion)||['failure','cancelled'].includes(state?.stage);
+    const publishFailed=!collectionFailed&&publishJob?.status==='completed'&&!['success','skipped'].includes(publishJob.conclusion);
+    const failed=publishFailed || collectionFailed;
+    const finished=!collectionFailed&&(published || (!publishJob&&run?.status==='completed'&&run.conclusion==='success'));
     const fresh=state && Date.now()-Date.parse(state.updated_at)<300000;
-    const collecting=fresh&&['starting','listing','details','coordinates','saving'].includes(state.stage);
+    const collecting=!failed&&!finished&&fresh&&['starting','listing','details','coordinates','saving'].includes(state.stage);
     const waitingPublication=!finished&&!failed&&!collecting&&(regionJob?.conclusion==='success'||state?.stage==='publishing'||state?.stage==='success'||publishJob?.status==='in_progress');
     const active=collecting || regionJob?.status==='in_progress';
     const noRegion=run&&!regionJob&&run.status==='completed';
-    const title=noRegion?'Область не збиралася в цьому запуску':failed?'⚠ Помилка':finished?'✓ Дані опубліковано':waitingPublication?'● Публікація результатів':active?'● Парсер працює':!run?(apiError?'Статус недоступний':'Запусків ще немає'):noRegion?'Область не збиралася в цьому запуску':'Очікує запуску';
+    const title=noRegion?'Область не збиралася в цьому запуску':failed?(collectionFailed?'⚠ Помилка збору карток':'⚠ Помилка публікації'):finished?'✓ Дані опубліковано':waitingPublication?'● Публікація результатів':active?'● Парсер працює':!run?(apiError?'Статус недоступний':'Запусків ще немає'):noRegion?'Область не збиралася в цьому запуску':'Очікує запуску';
     $('parser-state').textContent=title;
     $('parser-state').dataset.kind=failed?'failure':finished?'success':active||waitingPublication?'active':'';
     if(run)$('parser-run').href=run.html_url;
@@ -49,6 +50,7 @@
     if(waitingPublication){for(let i=0;i<4;i++)statuses[i]='done';statuses[4]='active';}
     if(finished)statuses.fill('done');
     if(noRegion)statuses.fill('pending');
+    if(collectionFailed){statuses[3]='failure';statuses[4]='pending';}
     if(publishFailed)statuses[4]='failure';
     $('parser-steps').replaceChildren(...stages.map((name,i)=>{const li=document.createElement('li');li.dataset.state=statuses[i];li.textContent=`${statuses[i]==='done'?'✓':statuses[i]==='active'?'●':statuses[i]==='failure'?'!':i+1} ${name}`;if(statuses[i]==='active')li.setAttribute('aria-current','step');return li;}));
     const parts=[];
@@ -56,7 +58,7 @@
     parts.push('Область: '+(option?.textContent||liveRegion));
     if(run)parts.push(`Запуск №${run.run_number||run.id}`);
     if(state){
-      parts.push(labels[state.stage]||state.stage);
+      parts.push(collectionFailed?'Збір зупинено · останній відомий прогрес':publishFailed?'Публікацію не завершено':(labels[state.stage]||state.stage));
       if(state.page)parts.push(`Сторінка: ${state.page}`);
       if(Number.isFinite(state.processed))parts.push(`Оброблено: ${state.processed}${state.total?' / приблизно '+state.total:''}`);
       if(Number.isFinite(state.accepted))parts.push(`Підтверджено: ${state.accepted}`);
@@ -68,7 +70,7 @@
     if(apiError)parts.push('GitHub тимчасово недоступний; показано останній відомий стан.');
     if(heartbeatError&&active)parts.push('Немає нового знімка активності; повторюю перевірку.');
     $('parser-detail').textContent=parts.join(' · ');
-    const bar=$('parser-progress');bar.hidden=noRegion||(!state&&!active&&!waitingPublication&&!finished);
+    const bar=$('parser-progress');bar.dataset.kind=failed?'failure':finished?'success':'active';bar.hidden=noRegion||(!state&&!active&&!waitingPublication&&!finished);
     if(finished)bar.value=100;else if(state?.total>0)bar.value=Math.min(99,100*(state.processed||0)/state.total);else bar.removeAttribute('value');
     $('parser-time').textContent=`Перевірено: ${date(lastChecked)} · Автоперевірка прогресу кожні 10 с`;
     clock();

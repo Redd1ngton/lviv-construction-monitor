@@ -161,6 +161,9 @@
     .filters { display:flex; flex-wrap:wrap; gap:.65rem; padding:.8rem 1rem; align-items:end; border-bottom:1px solid var(--border); }
     .filters label { display:grid; gap:.25rem; font-size:.75rem; color:var(--muted); flex:1 1 150px; }
     select, input[type="date"], input[type="number"] { min-width:0; width:100%; padding:.55rem; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--text); font:inherit; }
+    .active-filters { flex-basis:100%; padding:.5rem; border:1px solid var(--border); border-radius:6px; font-size:.85rem; color:#bfdbfe; }
+    #btn-empty-reset { margin:.5rem; }
+    #parser-progress[data-kind="failure"] { accent-color:#fb7185; }
     #result-count { flex-basis:100%; font-size:.85rem; }
     main { grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); align-items:start; }
     .table-wrap { max-height:75vh; }
@@ -240,8 +243,9 @@
     <label>Дата від<input id="filter-from" type="date"></label>
     <label>Дата до<input id="filter-to" type="date"></label>
     <label>Розташування<select id="filter-location"><option value="">Усі записи</option><option value="located">Є точка на карті</option><option value="exact">Точні / уточнені точки</option><option value="missing">Без точки</option></select></label>
-    <button id="btn-reset-filters" class="secondary">Скинути фільтри</button>
+    <button id="btn-reset-filters" class="secondary">Скинути всі фільтри</button>
     <button id="btn-select-visible" class="secondary">Додати видимі до маршруту (до 10)</button>
+    <div id="active-filters" class="active-filters"></div>
     <div id="result-count" role="status" aria-live="polite"></div>
   </section>
   <main>
@@ -263,6 +267,7 @@
         <tbody id="tbody"></tbody>
       </table>
       <div class="empty" id="empty" style="display:none">Немає записів для цього пошуку або перший автоматичний збір ще не завершився.</div>
+      <button type="button" id="btn-empty-reset" class="secondary" hidden>Скинути всі фільтри</button>
     </div>
     <div class="map-column">
       <div class="map-info"><p id="map-count"></p><small id="map-note">Позиції з реєстру мають пріоритет. Приблизні точки позначено окремо.</small></div>
@@ -280,12 +285,12 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261028-2"></script>
-  <script defer src="datasets.js?v=20261028-2"></script>
-  <script defer src="collection.js?v=20261028-2"></script>
-  <script defer src="app.js?v=20261028-2"></script>
-  <script defer src="snapshots.js?v=20261028-2"></script>
-  <script defer src="status.js?v=20261028-2"></script>
+  <script defer src="geo.js?v=20261028-3"></script>
+  <script defer src="datasets.js?v=20261028-3"></script>
+  <script defer src="collection.js?v=20261028-3"></script>
+  <script defer src="app.js?v=20261028-3"></script>
+  <script defer src="snapshots.js?v=20261028-3"></script>
+  <script defer src="status.js?v=20261028-3"></script>
 </body>
 </html>
 

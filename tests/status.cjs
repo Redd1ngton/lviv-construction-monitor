@@ -10,6 +10,7 @@ vm.runInNewContext(fs.readFileSync(__dirname+'/../frontend/status.js','utf8'),co
  hb.stage='publishing';publish.status='in_progress';await context.ParserStatus.refresh(true);assert(byId('parser-state').textContent.includes('Публікація'));assert.equal(reloads,0);
  publish.status='completed';publish.conclusion='success';await context.ParserStatus.refresh(true);assert(byId('parser-state').textContent.includes('опубліковано'));assert.equal(reloads,1);await context.ParserStatus.refresh(true);assert.equal(reloads,1,'Do not reload repeatedly for one successful publication');
  publish.status='queued';publish.conclusion=null;region.conclusion='failure';hb.stage='failure';await context.ParserStatus.refresh(true);assert(byId('parser-state').textContent.includes('Помилка'));
+ hb.stage='details';await context.ParserStatus.refresh(true);assert.equal(byId('parser-steps').children[3].dataset.state,'failure','Terminal GitHub failure overrides older heartbeat');assert.equal(byId('parser-steps').children[4].dataset.state,'pending');assert(!byId('parser-detail').textContent.includes('Обробка карток'));
  offline=true;await context.ParserStatus.refresh(true);assert.equal(byId('parser-refresh').disabled,false);assert(byId('parser-detail').textContent.includes('тимчасово недоступний'));
  console.log('Live heartbeat, publication phase, one-time automatic reload, failures and network recovery: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

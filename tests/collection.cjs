@@ -12,5 +12,6 @@ vm.runInNewContext(fs.readFileSync(__dirname+'/../frontend/collection.js','utf8'
  byId('collection-all').handlers.click();assert.equal(context.CollectionManager.selectedKeys.size,Object.keys(regions).length);
  allow=false;let prevented=false;byId('collection-launch').handlers.click({preventDefault(){prevented=true}});assert(prevented,'Country launch must ask before proceeding');
  byId('collection-clear').handlers.click();prevented=false;byId('collection-launch').handlers.click({preventDefault(){prevented=true}});assert(prevented,'Empty selection cannot launch');
+ context.CollectionManager.reset(['lviv']);assert.deepEqual([...context.CollectionManager.selectedKeys],['lviv']);
  console.log('Region checkboxes, saved default, copying scope and whole-country confirmation: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

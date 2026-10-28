@@ -85,7 +85,7 @@ def main():
             safe_publish()
             last_publish = time.monotonic()
     if child.returncode:
-        snapshot('failure', message='Помилка збору. Попередні дані збережені; подробиці у журналі запуску.')
+        snapshot('failure', message='Збір зупинено. Показано останній перевірений прогрес; попередні опубліковані дані збережені.')
     else:
         snapshot('publishing')
     safe_publish()
