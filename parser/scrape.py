@@ -166,6 +166,7 @@ def main():
     address_lookup = AddressLookup(session, args.output_dir / 'parcel_coordinates.json')
     address_lookup.cache = parcel_lookup.cache
     processed = 0
+    stalled_pages = 0
     snapshot('starting', processed=0, accepted=0, from_date=start, to_date=end)
     try:
         for page in range(1, args.max_pages + 1):
@@ -185,10 +186,22 @@ def main():
                     return
                 raise RuntimeError('Empty registry response; previous dataset retained')
             signature = tuple(links)
-            # A moving registry can repeat previously observed cards on its final page.
-            # The explicit absence of a Next link is authoritative termination.
+            # Registry pagination can temporarily repeat a cached intermediate page.
+            # Retry without cache, then permit bounded overlap while advancing.
             if has_next and signature in page_signatures:
-                raise RuntimeError('Pagination repeated a non-final page; refusing partial publication')
+                for retry in range(2):
+                    html = fetch(list_url(start, end, page, args.region) + '?_refresh=' + str(time.time_ns()))
+                    links, has_next = list_links(html)
+                    if not links: raise RuntimeError('Empty pagination retry; previous dataset retained')
+                    signature = tuple(links)
+                    if not has_next or any(url not in seen for url in links): break
+            if has_next and all(url in seen for url in links):
+                stalled_pages += 1
+                print(f'Warning: repeated page {page}, advancing ({stalled_pages}/3)', flush=True)
+                if stalled_pages >= 3:
+                    raise RuntimeError('Pagination repeated non-final pages without progress; previous dataset retained')
+            else:
+                stalled_pages = 0
             page_signatures.add(signature)
             for url in links:
                 if url in seen:

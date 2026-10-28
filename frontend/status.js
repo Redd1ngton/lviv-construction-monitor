@@ -3,9 +3,12 @@
   const repo='Redd1ngton/lviv-construction-monitor',api=`https://api.github.com/repos/${repo}/actions`;
   const $=id=>document.getElementById(id);
   if(!$('parser-state'))return;
+  let preferredRunId='';
+  try{preferredRunId=sessionStorage.getItem('construction-requested-run')||'';}catch(_){}
   const labels={starting:'Підключення до реєстру',listing:'Читання списку документів',details:'Обробка карток',coordinates:'Пошук координат та адрес',saving:'Збереження результатів',publishing:'Публікація даних',success:'Картки зібрано',failure:'Помилка збору',cancelled:'Збір скасовано'};
   const stages=['Підготовка','Встановлення','Перевірки','Збір карток','Публікація'];
   let run=null,regionJob=null,publishJob=null,heartbeat=null,liveRegion='lviv',steps=[],busy=false;
+  let refreshAgain=false;
   let lastApi=0,lastChecked=null,apiError='',heartbeatError='',reloaded='',retryAt=0,detectedRun='';
   const date=value=>value?new Date(value).toLocaleString('uk-UA'):'—';
   async function get(url){
@@ -76,12 +79,13 @@
     clock();
   }
   async function refresh(force=false){
-    if(busy)return;busy=true;$('parser-refresh').disabled=true;
+    if(busy){if(force)refreshAgain=true;return;}busy=true;$('parser-refresh').disabled=true;
     try{
       if(force||Date.now()-lastApi>=180000){
         try{
           const result=await get(`${api}/runs?per_page=10`),runs=result.workflow_runs.filter(r=>r.path==='.github/workflows/daily-scrape.yml');
-          run=runs.find(r=>r.status==='in_progress')||runs[0]||null;
+          run=runs.find(r=>String(r.id)===preferredRunId)||runs.find(r=>r.status==='in_progress')||runs[0]||null;
+          if(preferredRunId&&!runs.some(r=>String(r.id)===preferredRunId)){try{run=await get(`https://api.github.com/repos/${repo}/actions/runs/${preferredRunId}`);}catch(_){}}
           const all=run?(await get(`${api}/runs/${run.id}/jobs?per_page=100`)).jobs:[];
           const selected=$('filter-region')?.value;
           const chosen=selected?(all.find(j=>j.name.includes('('+selected+')'))||(selected==='lviv'?all.find(j=>j.name==='scrape'):null)):all.find(j=>j.name.startsWith('scrape (')&&j.status==='in_progress')||all.find(j=>j.name.startsWith('scrape ('))||all.find(j=>j.name==='scrape');
@@ -99,7 +103,7 @@
         retryAt=Date.now()+60000;
         const ok=await window.ConstructionApp.reload({automatic:true});if(ok)reloaded=key;
       }
-    }finally{busy=false;$('parser-refresh').disabled=false;}
+    }finally{busy=false;$('parser-refresh').disabled=false;if(refreshAgain){refreshAgain=false;setTimeout(()=>refresh(true),0);}}
   }
   let scopeTimer;
   const scopeChanged=()=>{clearTimeout(scopeTimer);scopeTimer=setTimeout(()=>{lastApi=0;heartbeat=null;refresh();},400);};
@@ -107,6 +111,6 @@
   document.addEventListener('collection-change',scopeChanged);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   $('parser-refresh').addEventListener('click',()=>refresh(true));
-  window.ParserStatus={refresh};
+  window.ParserStatus={refresh,watchRun(requested){if(!/^\d+$/.test(String(requested.id)))return;preferredRunId=String(requested.id);try{sessionStorage.setItem('construction-requested-run',preferredRunId);}catch(_){}heartbeat=null;lastApi=0;reloaded='';refresh(true);}};
   refresh();setInterval(()=>{if(!document.hidden)refresh();},10000);setInterval(()=>{if(!document.hidden)clock();},1000);
 })();

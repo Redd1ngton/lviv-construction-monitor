@@ -227,8 +227,20 @@
     <p>Відмітьте потрібні області. Щоденний збір за замовчуванням — лише Львівська область. Збір усієї України потребує окремого підтвердження.</p>
     <div class="collection-actions"><button type="button" id="collection-all" class="secondary">Обрати всі</button><button type="button" id="collection-clear" class="secondary">Зняти всі</button><strong id="collection-count"></strong></div>
     <div id="region-checks" class="region-checks"></div>
-    <div class="collection-actions"><label>Коди для запуску<input id="collection-codes" readonly></label><button type="button" id="collection-copy">Скопіювати вибір</button><a id="collection-launch" href="https://github.com/Redd1ngton/lviv-construction-monitor/actions/workflows/daily-scrape.yml" target="_blank" rel="noopener">Відкрити запуск обраних регіонів ↗</a></div>
-    <p id="collection-message" role="status">Для запуску: скопіюйте вибір → відкрийте GitHub → Run workflow → вставте коди в regions. Змінювати щоденний розклад можна у parser/collection.json.</p>
+    <div class="collection-actions">
+      <label>За останні дні<input id="collection-days" type="number" min="1" max="90" value="7"></label>
+      <label>Ключ керування<input id="collection-key" type="password" autocomplete="off" placeholder="PARSER_ADMIN_KEY"></label>
+      <button id="collection-launch" type="button">Почати збір обраних регіонів</button>
+      <a href="https://github.com/Redd1ngton/lviv-construction-monitor/actions/workflows/daily-scrape.yml" target="_blank" rel="noopener">Ручний запуск у GitHub ↗</a>
+    </div>
+    <p id="collection-backend" role="status">Перевіряю підключення запуску…</p>
+    <p id="collection-message" role="status">Галочки визначають області пошуку. Натисніть «Почати збір обраних регіонів», щоб отримати нові дані.</p>
+    <details id="collection-setup"><summary>Одноразове підключення запуску</summary>
+      <p>У Cloudflare Pages → Settings → Variables and Secrets додайте секрети для Production:</p>
+      <ul><li><strong>GITHUB_TOKEN</strong> — fine-grained токен лише цього репозиторію з дозволом Actions: read and write.</li><li><strong>PARSER_ADMIN_KEY</strong> — ваш випадковий ключ керування (рекомендовано від 32 символів). Його вводять у поле вище.</li></ul>
+      <p>Повторно розгорніть сайт. Токен GitHub зберігається тільки на сервері; ключ керування не записується у пам’ять браузера. Не надсилайте секрети в чат.</p>
+    </details>
+    <details><summary>Параметри для ручного запуску</summary><div class="collection-actions"><label>Коди регіонів<input id="collection-codes" readonly></label><button type="button" id="collection-copy">Скопіювати вибір</button></div></details>
   </details>
   <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
   <div id="category-tabs" class="category-tabs" role="tablist" aria-label="Типи об’єктів"></div>
@@ -285,12 +297,12 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261028-3"></script>
-  <script defer src="datasets.js?v=20261028-3"></script>
-  <script defer src="collection.js?v=20261028-3"></script>
-  <script defer src="app.js?v=20261028-3"></script>
-  <script defer src="snapshots.js?v=20261028-3"></script>
-  <script defer src="status.js?v=20261028-3"></script>
+  <script defer src="geo.js?v=20261028-4"></script>
+  <script defer src="datasets.js?v=20261028-4"></script>
+  <script defer src="collection.js?v=20261028-4"></script>
+  <script defer src="app.js?v=20261028-4"></script>
+  <script defer src="snapshots.js?v=20261028-4"></script>
+  <script defer src="status.js?v=20261028-4"></script>
 </body>
 </html>
 

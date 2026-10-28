@@ -1,9 +1,14 @@
 name: Update construction registry
+run-name: "Збір ${{ inputs.request_id || github.run_number }} — ${{ inputs.regions || 'збережені регіони' }}"
 on:
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
     inputs:
+      request_id:
+        description: 'Ідентифікатор запиту із сайту'
+        default: ''
+        type: string
       regions:
         description: 'Коди обраних регіонів через кому (наприклад lviv,odesa). Порожньо — збережений розклад.'
         default: ''
@@ -18,7 +23,7 @@ on:
         type: string
   push:
     branches: [main]
-    paths: ['parser/**', '.github/workflows/daily-scrape.yml', 'scripts/merge_regions.py']
+    paths: ['parser/collection.json']
 permissions:
   contents: write
 concurrency:
@@ -81,6 +86,7 @@ jobs:
       - run: node tests/collection.cjs
       - run: node tests/snapshots.cjs
       - run: node tests/status.cjs
+      - run: node tests/parser-api.mjs
       - name: Restore region history
         run: |
           python - <<'PY'

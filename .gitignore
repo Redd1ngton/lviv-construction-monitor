@@ -1,0 +1,6 @@
+.env*
+.dev.vars*
+.wrangler/
+__pycache__/
+_collect/
+_artifacts/
