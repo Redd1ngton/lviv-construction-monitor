@@ -14,7 +14,8 @@ from urllib.parse import quote, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from progress import snapshot
-from coordinates import extract, ParcelLookup
+from coordinates import extract, ParcelLookup, AddressLookup
+from address import address_fields
 from regions import REGIONS, region_of
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -22,7 +23,7 @@ from urllib3.util.retry import Retry
 BASE_URL = 'https://e-construction.gov.ua'
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
 FIELDS = ['doc_number', 'reg_date', 'object_name', 'address', 'customer', 'status',
-          'org_issuer', 'doc_type', 'region', 'region_key', 'lat', 'lon', 'coord_source', 'cadastral_numbers', 'location_description', 'detail_url']
+          'org_issuer', 'doc_type', 'region', 'region_key', 'lat', 'lon', 'coord_source', 'cadastral_numbers', 'location_description', 'full_address', 'street_address', 'house_number', 'coordinate_address', 'detail_url']
 
 
 def clean(value):
@@ -63,6 +64,7 @@ def parse_detail(html, url):
                 address = clean(right.get_text(' ', strip=True))
                 break
     coordinates, cadastral_numbers = extract(soup)
+    details = address_fields(address,field('Опис місцезнаходження'),field("Назва об'єкта","Назва об'єкта будівництва"))
     return dict(doc_number=number, reg_date=registered,
                 object_name=field("Назва об'єкта", "Назва об'єкта будівництва"),
                 address=address, customer='; '.join(dict.fromkeys(customers)),
@@ -70,7 +72,7 @@ def parse_detail(html, url):
                 org_issuer=field('Орган, що видав'), doc_type=field('Тип'),
                 lat=coordinates.get('lat'), lon=coordinates.get('lon'),
                 coord_source=coordinates.get('coord_source'), cadastral_numbers=cadastral_numbers,
-                location_description=field('Опис місцезнаходження'), detail_url=url)
+                location_description=field('Опис місцезнаходження'), detail_url=url, **details)
 
 
 def list_links(html):
@@ -161,6 +163,8 @@ def main():
         return response.text
     records, seen, page_signatures = [], set(), set()
     parcel_lookup = ParcelLookup(session, args.output_dir / 'parcel_coordinates.json')
+    address_lookup = AddressLookup(session, args.output_dir / 'parcel_coordinates.json')
+    address_lookup.cache = parcel_lookup.cache
     processed = 0
     snapshot('starting', processed=0, accepted=0, from_date=start, to_date=end)
     try:
@@ -197,6 +201,9 @@ def main():
                     if record.get('lat') is None and record.get('cadastral_numbers'):
                         snapshot('coordinates', processed=processed, accepted=len(records))
                         record.update(parcel_lookup.resolve(record['cadastral_numbers']))
+                    if record.get('lat') is None and record.get('street_address'):
+                        snapshot('coordinates', processed=processed, accepted=len(records))
+                        record.update(address_lookup.resolve_address(record))
                     records.append(record)
                 else:
                     print(f'Skip outside verified region/date/status: {record["doc_number"]}', flush=True)

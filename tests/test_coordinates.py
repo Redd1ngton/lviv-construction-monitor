@@ -21,3 +21,8 @@ class CoordinatesTests(unittest.TestCase):
     def test_explicit_marker(self):
         coords,_ = extract(BeautifulSoup('<script>L.marker([49.8,23.95]).addTo(map)</script>','html.parser'))
         self.assertEqual(coords['lon'],23.95)
+
+    def test_scoped_geojson_point(self):
+        html = """<div><h3 id="object_loc">Адреса</h3><div data-geometry='{"type":"Point","coordinates":[24.03,49.84]}'></div></div>"""
+        coords,_=extract(BeautifulSoup(html,'html.parser'))
+        self.assertEqual(coords['lat'],49.84)

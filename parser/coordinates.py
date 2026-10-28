@@ -35,6 +35,18 @@ def extract(soup):
         except (ValueError, TypeError):
             pass
     markers = set()
+    section = soup.select_one('#object_loc')
+    scope = section.parent if section else None
+    if scope:
+        for node in scope.select('[data-geometry], [data-geojson], script[type="application/json"]'):
+            raw = node.get('data-geometry') or node.get('data-geojson') or node.get_text()
+            try:
+                geometry = json.loads(raw)
+                if geometry.get('type') == 'Feature': geometry = geometry.get('geometry') or {}
+                if geometry.get('type') == 'Point':
+                    lon, lat = map(float, geometry['coordinates'][:2])
+                    if valid(lat, lon): markers.add((lat,lon))
+            except (ValueError,TypeError,KeyError,AttributeError): pass
     for script in soup.select('script'):
         for match in re.finditer(r'L\.marker\(\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]', script.get_text()):
             lat, lon = map(float, match.groups())
@@ -75,3 +87,24 @@ class ParcelLookup:
         if len(numbers) == 1 and len(results) == 1:
             return results[0]
         return {}
+
+
+class AddressLookup(ParcelLookup):
+    def resolve_address(self, record):
+        from address import address_point
+        if not record.get('street_address'): return {}
+        query=record.get('full_address','')
+        key='address:'+query
+        if key not in self.cache and self.failures<3:
+            try:
+                time.sleep(1.2)
+                response=self.session.get('https://e-construction.gov.ua/api-user/gis-url-proxy',params={'searchtext':'Україна, '+query},timeout=(10,20))
+                response.raise_for_status()
+                result=address_point(response.json(),record)
+                if result:
+                    self.cache[key]=result
+                    self.path.parent.mkdir(parents=True,exist_ok=True)
+                    self.path.write_text(json.dumps(self.cache,ensure_ascii=False,indent=2))
+                else:self.failures+=1
+            except (ValueError,TypeError,OSError,requests.RequestException):self.failures+=1
+        return self.cache.get(key,{})

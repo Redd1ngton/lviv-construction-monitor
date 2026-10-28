@@ -51,7 +51,15 @@
     }
     return '';
   }
-  const api = {region, norm, settlement, district, category, index, locate};
+  function address(item) {
+    const street=item.street_address || [item.address,item.location_description,item.object_name].map(text=>String(text||'').match(/(?:^|[\s,;])(?:вулиця|вул\.?|провулок|пров\.?|проспект|площа|шосе|бульвар)\s+[^,;\n]+/i)?.[0]).find(Boolean) || '';
+    const base=String(item.address||'').replace(/\([^)]*\)/g,'').trim();
+    const description=String(item.location_description||'');
+    const house=item.house_number || description.match(/(?:будинок|буд\.?|№)\s*([0-9]+[А-Яа-яA-Za-z]?(?:[/-][0-9А-Яа-яA-Za-z]+)?)/i)?.[1] || '';
+    const full=item.full_address || [base,street&&!norm(base).includes(norm(street))?street:'',house&&!base.includes(house)&&!street.includes(house)?'буд. '+house:''].filter(Boolean).join(', ');
+    return {street_address:street,house_number:house,full_address:full};
+  }
+  const api = {address, region, norm, settlement, district, category, index, locate};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ConstructionGeo = api;
 })(typeof window === 'undefined' ? globalThis : window);

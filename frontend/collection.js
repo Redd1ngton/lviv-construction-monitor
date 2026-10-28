@@ -11,7 +11,7 @@
     byId('collection-codes').value=[...selected].join(',');
     byId('collection-launch').setAttribute('aria-disabled',String(!selected.size));
     byId('filter-region').value=selected.size===1?[...selected][0]:'';
-    window.ConstructionApp?.refresh();
+    if(window.ConstructionApp?.regionChanged)window.ConstructionApp.regionChanged();else window.ConstructionApp?.refresh();
     document.dispatchEvent(new Event('collection-change'));
   }
   function draw(){
@@ -19,7 +19,8 @@
     for(const [key,name] of Object.entries(regions).sort((a,b)=>a[1].localeCompare(b[1],'uk'))){
       const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=key;input.checked=selected.has(key);
       input.addEventListener('change',()=>{input.checked?selected.add(key):selected.delete(key);update();});
-      const text=document.createElement('span');text.textContent=name;label.append(input,text);list.appendChild(label);
+      const text=document.createElement('span');text.textContent=name;label.append(input,text);
+      const only=document.createElement('button');only.type='button';only.className='small secondary region-only';only.textContent='Лише ця';only.setAttribute('aria-label','Лише '+name);only.addEventListener('click',()=>{selected=new Set([key]);draw();});label.appendChild(only);list.appendChild(label);
     }
     update();
   }

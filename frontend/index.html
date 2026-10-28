@@ -186,6 +186,7 @@
     </div>
     <div class="controls">
       <input type="search" id="search" placeholder="Пошук за адресою, назвою, замовником…" />
+      <button id="btn-force-refresh" type="button">Примусово оновити дані</button>
       <button id="btn-route" disabled>Побудувати маршрут</button>
       <button class="secondary" id="btn-clear">Очистити вибір</button>
       <a id="download-json" href="../data/constructions.json" download class="badge">JSON</a>
@@ -204,6 +205,7 @@
     <div id="parser-detail">Завантажую стан останнього запуску.</div>
     <small id="parser-time"></small>
   </section>
+  <p id="data-refresh-message" class="collection-note" role="status" aria-live="polite">Оновлення завантажує готові результати. Новий збір запускається для обраних регіонів через GitHub.</p>
   <details class="snapshots-panel" open>
     <summary>Знімки парсингу та порівняння</summary>
     <div class="snapshot-controls">
@@ -277,12 +279,12 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261023-5"></script>
-  <script defer src="datasets.js?v=20261023-5"></script>
-  <script defer src="collection.js?v=20261023-5"></script>
-  <script defer src="app.js?v=20261023-5"></script>
-  <script defer src="snapshots.js?v=20261023-5"></script>
-  <script defer src="status.js?v=20261023-5"></script>
+  <script defer src="geo.js?v=20261028-1"></script>
+  <script defer src="datasets.js?v=20261028-1"></script>
+  <script defer src="collection.js?v=20261028-1"></script>
+  <script defer src="app.js?v=20261028-1"></script>
+  <script defer src="snapshots.js?v=20261028-1"></script>
+  <script defer src="status.js?v=20261028-1"></script>
 </body>
 </html>
 

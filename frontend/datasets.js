@@ -1,6 +1,6 @@
 /* Snapshot comparison is independent of map and DOM. */
 (function(root) {
-  const fields=['reg_date','object_name','address','customer','status','doc_type','org_issuer','location_description'];
+  const fields=['reg_date','object_name','address','customer','status','doc_type','org_issuer','location_description','full_address','street_address','house_number'];
   const key = item => String(item.doc_number || '').trim();
   function parse(value) {
     const data=Array.isArray(value)?{items:value}:value;
