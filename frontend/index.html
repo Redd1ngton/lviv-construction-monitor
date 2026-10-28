@@ -133,6 +133,8 @@
     .parser-steps li[data-state="failure"] { color: #fda4af; border-color: #fb7185; }
     #parser-progress { width: 100%; height: .6rem; accent-color: var(--accent2); }
     #parser-detail { overflow-wrap: anywhere; }
+    #parser-age { display:block; margin-top:.25rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .parser-top button#btn-force-refresh { margin-left:0; font-size:.95rem; padding:.7rem 1.1rem; }
     #parser-time { display: block; margin-top: .3rem; color: var(--muted); }
     @media(max-width: 600px) { .parser-panel { padding: .75rem; } .parser-top button { margin-left: 0; } }
     .snapshots-panel { padding:.8rem 1rem; background:var(--card); border-bottom:1px solid var(--border); font-size:.85rem; }
@@ -186,7 +188,6 @@
     </div>
     <div class="controls">
       <input type="search" id="search" placeholder="Пошук за адресою, назвою, замовником…" />
-      <button id="btn-force-refresh" type="button">Примусово оновити дані</button>
       <button id="btn-route" disabled>Побудувати маршрут</button>
       <button class="secondary" id="btn-clear">Очистити вибір</button>
       <a id="download-json" href="../data/constructions.json" download class="badge">JSON</a>
@@ -195,7 +196,7 @@
   </header>
 
   <section class="parser-panel" aria-labelledby="parser-heading">
-    <div class="parser-top"><strong id="parser-heading">Збір даних</strong>
+    <div class="parser-top"><button id="btn-force-refresh" type="button">Оновити дані</button><strong id="parser-heading">Збір даних</strong>
       <span id="parser-state" role="status" aria-live="polite">Перевіряю стан…</span>
       <a id="parser-run" href="https://github.com/Redd1ngton/lviv-construction-monitor/actions" target="_blank" rel="noopener">Журнал запуску ↗</a>
       <button id="parser-refresh" class="secondary" type="button">Оновити статус</button>
@@ -203,7 +204,7 @@
     <ol id="parser-steps" class="parser-steps" aria-label="Етапи збору"></ol>
     <progress id="parser-progress" max="100" hidden aria-label="Прогрес обробки карток"></progress>
     <div id="parser-detail">Завантажую стан останнього запуску.</div>
-    <small id="parser-time"></small>
+    <small id="parser-time"></small><small id="parser-age"></small>
   </section>
   <p id="data-refresh-message" class="collection-note" role="status" aria-live="polite">Оновлення завантажує готові результати. Новий збір запускається для обраних регіонів через GitHub.</p>
   <details class="snapshots-panel" open>
@@ -279,12 +280,12 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261028-1"></script>
-  <script defer src="datasets.js?v=20261028-1"></script>
-  <script defer src="collection.js?v=20261028-1"></script>
-  <script defer src="app.js?v=20261028-1"></script>
-  <script defer src="snapshots.js?v=20261028-1"></script>
-  <script defer src="status.js?v=20261028-1"></script>
+  <script defer src="geo.js?v=20261028-2"></script>
+  <script defer src="datasets.js?v=20261028-2"></script>
+  <script defer src="collection.js?v=20261028-2"></script>
+  <script defer src="app.js?v=20261028-2"></script>
+  <script defer src="snapshots.js?v=20261028-2"></script>
+  <script defer src="status.js?v=20261028-2"></script>
 </body>
 </html>
 

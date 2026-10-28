@@ -46,6 +46,7 @@ const call=code=>vm.runInContext('testEval('+JSON.stringify(code)+')',context);
  call('savePin({preventDefault(){}})');assert.equal(call('items[2].coord_source'),'manual');
  const late={...context,document:{...context.document,readyState:'complete'}};late.window=late;late.L=undefined;vm.createContext(late);vm.runInContext(appSource,late);await new Promise(resolve=>setTimeout(resolve,20));assert(late.ConstructionApp,'App starts after DOMContentLoaded as well');
  await byId('btn-force-refresh').handlers.click();await new Promise(resolve=>setTimeout(resolve,30));assert.equal(byId('btn-force-refresh').disabled,false);assert(byId('data-refresh-message').textContent.includes('Дані оновлено'));
+ byId('snapshot-mode').value='changed';await late.ConstructionApp.reload({automatic:true});assert.equal(byId('snapshot-mode').value,'changed','Automatic publication refresh preserves comparison mode');
  const oldFetch=late.fetch;late.fetch=async()=>{throw Error('offline')};late.console={...console,warn(){}};await byId('btn-force-refresh').handlers.click();assert.equal(byId('btn-force-refresh').disabled,false);assert(byId('data-refresh-message').textContent.includes('Попередні дані'));late.fetch=oldFetch;
  console.log('Settlement matching, filters, cross-tab route selection and manual pin: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

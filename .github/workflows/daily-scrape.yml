@@ -80,6 +80,7 @@ jobs:
       - run: node tests/datasets.cjs
       - run: node tests/collection.cjs
       - run: node tests/snapshots.cjs
+      - run: node tests/status.cjs
       - name: Restore region history
         run: |
           python - <<'PY'

@@ -31,8 +31,8 @@ async function fetchJson(url, force=false) {
   finally { clearTimeout(timer); }
 }
 let loadingData=false;
-async function loadData(force=false) {
-  if(loadingData)return;
+async function loadData(force=false, automatic=false) {
+  if(loadingData)return false;
   loadingData=true;
   const button=$('btn-force-refresh');if(button){button.disabled=true;button.textContent='Оновлюю…';}
   if(force)$('data-refresh-message').textContent='Завантажую останні опубліковані дані без кешу…';
@@ -45,16 +45,17 @@ async function loadData(force=false) {
       $('meta').textContent = `Оновлено: ${data.updated_at ? new Date(data.updated_at).toLocaleString('uk-UA') : '—'} · Записів: ${items.length}`;
       $('download-json').href = url;
       $('download-csv').href = url.endsWith('data.json') ? url.replace(/data\.json$/, 'data.csv') : url.replace(/constructions\.json$/, 'constructions.csv');
-      if(force && $('snapshot-mode'))$('snapshot-mode').value='live';
+      if(force && !automatic && $('snapshot-mode'))$('snapshot-mode').value='live';
       if (window.DatasetManager) window.DatasetManager.setLive({...data, items:rows});
       if(force)$('data-refresh-message').textContent='Дані оновлено. Дата останнього збору: '+(data.updated_at?new Date(data.updated_at).toLocaleString('uk-UA'):'невідома')+'. Для нового збору відкрийте запуск обраних регіонів.';
-      return;
+      return true;
     } catch (error) { console.warn('Data unavailable', url, error); }
   }
   $('meta').textContent = 'Не вдалося завантажити дані. Спробуйте оновити сторінку.';
   if(force)$('data-refresh-message').textContent='Не вдалося оновити. Попередні дані залишаються на екрані.';
   refresh();
-  } finally { loadingData=false;if(button){button.disabled=false;button.textContent='Примусово оновити дані';} }
+  return false;
+  } finally { loadingData=false;if(button){button.disabled=false;button.textContent='Оновити дані';} }
 }
 function prepareItems(rows) {
   return rows.map(row => {
@@ -81,7 +82,7 @@ async function setData(rows, label) {
   $('dataset-label').textContent=label;
   refresh();
 }
-window.ConstructionApp={setData, refresh, reload:()=>loadData(true), regionChanged(){ $('filter-town').value='';refresh(); }};
+window.ConstructionApp={setData, refresh, reload:(options={})=>loadData(true,Boolean(options.automatic)), regionChanged(){ $('filter-town').value='';refresh(); }};
 function populateFilters() {
   for (const [id,key,empty] of [['filter-region','region_key','Усі області'],['filter-town','settlement','Усі населені пункти'],['filter-category','object_category','Усі типи об’єктів'],['filter-document','doc_type','Усі типи документів']]) {
     const counts = new Map(key==='region_key'?Object.keys(regionNames).map(key=>[key,0]):[]);
@@ -238,7 +239,7 @@ function onBuildRoute() {
 }
 document.addEventListener('leaflet-ready',()=>{if(!map){try{initMap();updateMarkers();}catch(error){console.warn(error);}}});
 function init(){
-  $('btn-force-refresh').addEventListener('click',()=>loadData(true));
+  $('btn-force-refresh').addEventListener('click',()=>{window.ParserStatus?.refresh(true);return loadData(true);});
   document.querySelectorAll('th[data-key]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.key;if(key==='_select')return;if(sortKey===key)sortDir*=-1;else{sortKey=key;sortDir=key==='reg_date'?-1:1;}renderTable();}));
   $('search').addEventListener('input',()=>refresh());
   for(const id of ['filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).addEventListener('change',()=>refresh());

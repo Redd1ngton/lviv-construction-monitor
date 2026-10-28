@@ -1,121 +1,110 @@
-/* Public run steps plus a separate, periodically published parser heartbeat. */
+/* Live progress from the parser heartbeat; GitHub steps supply lifecycle and publication. */
 (() => {
-  const repo = 'Redd1ngton/lviv-construction-monitor';
-  const api = `https://api.github.com/repos/${repo}/actions`;
-  const stages = ['Підготовка', 'Встановлення', 'Перевірки', 'Збір карток', 'Публікація'];
-  const labels = {starting: 'Підключення до реєстру', listing: 'Читання сторінки реєстру',
-    coordinates: 'Отримання координат із карти реєстру', details: 'Обробка карток', saving: 'Збереження JSON і CSV', publishing: 'Публікація даних'};
-  let latestHeartbeat = null, liveRegion='lviv', regionJob=null, publishJob=null;
-  let run = null, jobs = [], lastApi = 0, lastCheck = null, apiError = '', busy = false;
-  const el = id => document.getElementById(id);
-  async function get(url) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-    try {
-      const response = await fetch(url, {cache: 'no-store', signal: controller.signal});
-      if (!response.ok) throw new Error(String(response.status));
-      return await response.json();
-    } finally { clearTimeout(timeout); }
+  const repo='Redd1ngton/lviv-construction-monitor',api=`https://api.github.com/repos/${repo}/actions`;
+  const $=id=>document.getElementById(id);
+  if(!$('parser-state'))return;
+  const labels={starting:'Підключення до реєстру',listing:'Читання списку документів',details:'Обробка карток',coordinates:'Пошук координат та адрес',saving:'Збереження результатів',publishing:'Публікація даних',success:'Картки зібрано',failure:'Помилка збору',cancelled:'Збір скасовано'};
+  const stages=['Підготовка','Встановлення','Перевірки','Збір карток','Публікація'];
+  let run=null,regionJob=null,publishJob=null,heartbeat=null,liveRegion='lviv',steps=[],busy=false;
+  let lastApi=0,lastChecked=null,apiError='',heartbeatError='',reloaded='',retryAt=0,detectedRun='';
+  const date=value=>value?new Date(value).toLocaleString('uk-UA'):'—';
+  async function get(url){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+    try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error(String(response.status));return await response.json();}
+    finally{clearTimeout(timer);}
   }
-  function date(value) {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('uk-UA');
-  }
-  function stepIndex(name) {
-    if (name.startsWith("Post ")) return -1;
-    if (/checkout|Set up job/.test(name)) return 0;
-    if (/setup-python|pip install/.test(name)) return 1;
-    if (/unittest/.test(name)) return 2;
-    if (/Collect and verify/.test(name)) return 3;
-    if (/Prepare standalone|Commit successful|Publish final|Merge and publish/.test(name)) return 4;
+  function stageIndex(name){
+    if(name.startsWith('Post '))return -1;
+    if(/Set up job|checkout/.test(name))return 0;
+    if(/setup-python|pip install/.test(name))return 1;
+    if(/unittest|tests\//.test(name))return 2;
+    if(/Collect and verify/.test(name))return 3;
+    if(/Publish final|Merge and publish|Commit successful/.test(name))return 4;
     return -1;
   }
-  function render(heartbeat) {
-    const sameRun = run && heartbeat && String(heartbeat.run_id) === String(run.id) &&
-      String(heartbeat.run_attempt || '1') === String(run.run_attempt || '1');
-    const state = sameRun ? heartbeat : null;
-    const completed = regionJob ? regionJob.status === 'completed' : run?.status === 'completed';
-    const success = completed && (regionJob?.conclusion || run.conclusion) === 'success';
-    const failed = completed && !success;
-    const active = regionJob ? regionJob.status === 'in_progress' : run?.status === 'in_progress';
-    const terminalHeartbeat = state && ['success', 'failure', 'cancelled'].includes(state.stage);
-    const publicationFailed=publishJob?.status==='completed' && publishJob.conclusion!=='success';
-    const title = publicationFailed ? '⚠ Помилка публікації даних' : success ? '✓ Завершено' : failed ? '⚠ ' + (run.conclusion === 'cancelled' ? 'Скасовано' : 'Помилка запуску') :
-      active ? '● Працює' : run ? 'Очікує запуску' : apiError ? 'Стан недоступний' : 'Запусків ще немає';
-    el('parser-state').textContent = title;
-    el('parser-state').dataset.kind = publicationFailed ? 'failure' : success ? 'success' : failed ? 'failure' : active ? 'active' : '';
-    if (run) el('parser-run').href = run.html_url;
-    const statuses = stages.map(() => 'pending');
-    for (const step of jobs) {
-      const index = stepIndex(step.name);
-      if (index < 0) continue;
-      if (step.conclusion && !['success', 'skipped'].includes(step.conclusion)) statuses[index] = 'failure';
-      else if (step.status === 'in_progress') statuses[index] = 'active';
-      else if (step.conclusion === 'success' && statuses[index] === 'pending') statuses[index] = 'done';
-    }
-    if (success) statuses.fill('done');
-    el('parser-steps').replaceChildren(...stages.map((name, index) => {
-      const li = document.createElement('li');
-      li.dataset.state = statuses[index];
-      li.textContent = `${statuses[index] === 'done' ? '✓' : statuses[index] === 'active' ? '●' : statuses[index] === 'failure' ? '!' : index + 1} ${name}`;
-      if (statuses[index] === 'active') li.setAttribute('aria-current', 'step');
-      return li;
-    }));
-    const detail = [];
-    if(regionJob) { const option=[...(document.getElementById('filter-region')?.options || [])].find(option=>option.value===liveRegion); detail.push('Область: '+(option?.textContent || liveRegion)); }
-    if (run) detail.push(`Запуск №${run.run_number} · Початок: ${date(run.run_started_at || run.created_at)}`);
-    if (state) {
-      if (!completed) detail.push(labels[state.stage] || (terminalHeartbeat ? 'Завершення запуску' : 'Оновлення стану'));
-      if (state.page) detail.push(`Сторінка: ${state.page}`);
-      if (Number.isFinite(state.processed)) detail.push(`Оброблено: ${state.processed}${state.total ? ' із приблизно ' + state.total : ''}`);
-      if (Number.isFinite(state.accepted)) detail.push(`Підтверджено: ${state.accepted}`);
-      if (active && Date.now() - new Date(state.updated_at).getTime() > 300000)
-        detail.push('⚠ Понад 5 хвилин без нових даних. Перевірте журнал запуску.');
-      if (failed && state.message) detail.push(state.message);
-    } else if (active) detail.push('Збір триває. Детальні лічильники з’являться з наступного запуску.');
-    if(regionJob && run?.status!=='completed' && completed)detail.push('Загальний набір публікується після завершення збору областей.');
-    if(publicationFailed)detail.push('Картки зібрано, але спільний набір не оновлено. Відкрийте журнал публікації.');
-    if (failed) detail.push('Останні успішно збережені дані залишаються доступними. Причина — у журналі запуску.');
-    if (apiError) detail.push('Не вдалося оновити стан GitHub. Показано останню отриману інформацію.');
-    if (!run) detail.push(apiError ? 'Перевірте підключення або відкрийте журнал запусків.' : 'Щоденний запуск о 04:17 UTC.');
-    el('parser-detail').textContent = detail.join(' · ');
-    const bar = el('parser-progress');
-    bar.hidden = !(state && state.total > 0 && (active || success));
-    bar.value = success ? 100 : Math.min(99, Math.round(100 * (state?.processed || 0) / (state?.total || 1)));
-    el('parser-time').textContent = `${state ? 'Остання активність парсера: ' + date(state.updated_at) + ' · ' : ''}Перевірено: ${date(lastCheck)} · Статус перевіряється автоматично`;
+  function currentHeartbeat(){return heartbeat && run && String(heartbeat.run_id)===String(run.id) && String(heartbeat.run_attempt||1)===String(run.run_attempt||1)?heartbeat:null;}
+  function clock(){
+    const state=currentHeartbeat(),parts=[];
+    if(run?.run_started_at){const ended=publishJob?.completed_at||(run.status==='completed'?run.updated_at:null);const seconds=Math.max(0,Math.floor(((ended?Date.parse(ended):Date.now())-Date.parse(run.run_started_at))/1000));if(Number.isFinite(seconds))parts.push(`${ended?'Тривалість':'Від початку'}: ${Math.floor(seconds/60)} хв ${seconds%60} с`);}
+    if(state?.updated_at){const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(state.updated_at))/1000));if(Number.isFinite(seconds))parts.push(`Остання активність: ${seconds} с тому`);}
+    if($('parser-age'))$('parser-age').textContent=parts.join(' · ');
   }
-  async function refresh(force = false) {
-    if (busy) return;
-    busy = true;
-    el('parser-refresh').disabled = true;
-    try {
-      if (force || Date.now() - lastApi > 180000) {
-        try {
-          const data = await get(`${api}/runs?per_page=5`);
-          const runs = data.workflow_runs.filter(r => r.path === '.github/workflows/daily-scrape.yml');
-          run = runs.find(r => r.status === 'in_progress') || runs[0] || null;
-          const allJobs = run ? (await get(`${api}/runs/${run.id}/jobs?per_page=100`)).jobs : [];
-          const selectedRegion = document.getElementById('filter-region')?.value;
-          const chosen = selectedRegion ? allJobs.find(job=>job.name.includes('('+selectedRegion+')')) : allJobs.find(job=>job.name.startsWith('scrape (') && job.status==='in_progress') || allJobs.find(job=>job.name.startsWith('scrape (')) || allJobs.find(job=>job.name==='scrape');
-          liveRegion=selectedRegion || chosen?.name.match(/\(([^)]+)\)/)?.[1] || 'lviv';
-          publishJob=allJobs.find(job=>job.name==='publish') || null;
-          regionJob=chosen || null;
-          jobs = chosen?.steps || [];
-          apiError = '';
-        } catch (error) { apiError = error.message; }
-        lastApi = Date.now();
+  function render(){
+    const state=currentHeartbeat(),published=publishJob?.conclusion==='success';
+    const publishFailed=publishJob?.status==='completed'&&!['success','skipped'].includes(publishJob.conclusion);
+    const failed=publishFailed || ['failure','cancelled'].includes(state?.stage) || (regionJob?.status==='completed'&&!['success','skipped'].includes(regionJob.conclusion));
+    const finished=published || (!publishJob&&run?.status==='completed'&&run.conclusion==='success');
+    const fresh=state && Date.now()-Date.parse(state.updated_at)<300000;
+    const collecting=fresh&&['starting','listing','details','coordinates','saving'].includes(state.stage);
+    const waitingPublication=!finished&&!failed&&!collecting&&(regionJob?.conclusion==='success'||state?.stage==='publishing'||state?.stage==='success'||publishJob?.status==='in_progress');
+    const active=collecting || regionJob?.status==='in_progress';
+    const noRegion=run&&!regionJob&&run.status==='completed';
+    const title=noRegion?'Область не збиралася в цьому запуску':failed?'⚠ Помилка':finished?'✓ Дані опубліковано':waitingPublication?'● Публікація результатів':active?'● Парсер працює':!run?(apiError?'Статус недоступний':'Запусків ще немає'):noRegion?'Область не збиралася в цьому запуску':'Очікує запуску';
+    $('parser-state').textContent=title;
+    $('parser-state').dataset.kind=failed?'failure':finished?'success':active||waitingPublication?'active':'';
+    if(run)$('parser-run').href=run.html_url;
+    const statuses=stages.map(()=> 'pending');
+    for(const step of steps){const i=stageIndex(step.name);if(i<0)continue;if(step.conclusion&&!['success','skipped'].includes(step.conclusion))statuses[i]='failure';else if(step.status==='in_progress')statuses[i]='active';else if(step.conclusion==='success'&&statuses[i]==='pending')statuses[i]='done';}
+    if(collecting){for(let i=0;i<3;i++)statuses[i]='done';statuses[3]='active';statuses[4]='pending';}
+    if(waitingPublication){for(let i=0;i<4;i++)statuses[i]='done';statuses[4]='active';}
+    if(finished)statuses.fill('done');
+    if(noRegion)statuses.fill('pending');
+    if(publishFailed)statuses[4]='failure';
+    $('parser-steps').replaceChildren(...stages.map((name,i)=>{const li=document.createElement('li');li.dataset.state=statuses[i];li.textContent=`${statuses[i]==='done'?'✓':statuses[i]==='active'?'●':statuses[i]==='failure'?'!':i+1} ${name}`;if(statuses[i]==='active')li.setAttribute('aria-current','step');return li;}));
+    const parts=[];
+    const option=[...($('filter-region')?.options||[])].find(o=>o.value===liveRegion);
+    parts.push('Область: '+(option?.textContent||liveRegion));
+    if(run)parts.push(`Запуск №${run.run_number||run.id}`);
+    if(state){
+      parts.push(labels[state.stage]||state.stage);
+      if(state.page)parts.push(`Сторінка: ${state.page}`);
+      if(Number.isFinite(state.processed))parts.push(`Оброблено: ${state.processed}${state.total?' / приблизно '+state.total:''}`);
+      if(Number.isFinite(state.accepted))parts.push(`Підтверджено: ${state.accepted}`);
+      if(active&&!fresh)parts.push('⚠ Понад 5 хвилин без активності. Перевірте журнал.');
+      if(failed&&state.message)parts.push(state.message);
+    }else if(active)parts.push('Очікую перший знімок прогресу…');
+    if(waitingPublication)parts.push('Зібрані картки ще не опубліковані. Таблиця оновиться після публікації.');
+    if(failed)parts.push('Останні успішні дані збережені. Причина — у журналі запуску.');
+    if(apiError)parts.push('GitHub тимчасово недоступний; показано останній відомий стан.');
+    if(heartbeatError&&active)parts.push('Немає нового знімка активності; повторюю перевірку.');
+    $('parser-detail').textContent=parts.join(' · ');
+    const bar=$('parser-progress');bar.hidden=noRegion||(!state&&!active&&!waitingPublication&&!finished);
+    if(finished)bar.value=100;else if(state?.total>0)bar.value=Math.min(99,100*(state.processed||0)/state.total);else bar.removeAttribute('value');
+    $('parser-time').textContent=`Перевірено: ${date(lastChecked)} · Автоперевірка прогресу кожні 10 с`;
+    clock();
+  }
+  async function refresh(force=false){
+    if(busy)return;busy=true;$('parser-refresh').disabled=true;
+    try{
+      if(force||Date.now()-lastApi>=180000){
+        try{
+          const result=await get(`${api}/runs?per_page=10`),runs=result.workflow_runs.filter(r=>r.path==='.github/workflows/daily-scrape.yml');
+          run=runs.find(r=>r.status==='in_progress')||runs[0]||null;
+          const all=run?(await get(`${api}/runs/${run.id}/jobs?per_page=100`)).jobs:[];
+          const selected=$('filter-region')?.value;
+          const chosen=selected?(all.find(j=>j.name.includes('('+selected+')'))||(selected==='lviv'?all.find(j=>j.name==='scrape'):null)):all.find(j=>j.name.startsWith('scrape (')&&j.status==='in_progress')||all.find(j=>j.name.startsWith('scrape ('))||all.find(j=>j.name==='scrape');
+          liveRegion=selected||chosen?.name.match(/\(([^)]+)\)/)?.[1]||'lviv';regionJob=chosen||null;publishJob=all.find(j=>j.name==='publish')||null;steps=chosen?.steps||[];apiError='';
+        }catch(error){apiError=error.message;}
+        lastApi=Date.now();
       }
-      try {
-        latestHeartbeat = await get(`https://raw.githubusercontent.com/${repo}/parser-status/status-${liveRegion}.json?t=${Math.floor(Date.now() / 20000)}`);
-      } catch (_) { /* Existing runs may not yet have a progress snapshot. */ }
-      lastCheck = new Date().toISOString();
-      render(latestHeartbeat);
-    } finally { busy = false; el('parser-refresh').disabled = false; }
+      try{heartbeat=await get(`https://raw.githubusercontent.com/${repo}/parser-status/status-${liveRegion}.json?t=${Math.floor(Date.now()/10000)}`);heartbeatError='';}
+      catch(error){heartbeatError=error.message;}
+      if(heartbeat && run && String(heartbeat.run_id)!==String(run.id) && String(heartbeat.run_id)!==detectedRun && Date.parse(heartbeat.updated_at)>Date.parse(run.created_at||run.run_started_at||0)){detectedRun=String(heartbeat.run_id);lastApi=0;}
+      lastChecked=new Date().toISOString();render();
+      const published=publishJob?.conclusion==='success'||(!publishJob&&run?.status==='completed'&&run.conclusion==='success');
+      const key=run?`${run.id}:${run.run_attempt||1}`:'';
+      if(published&&key!==reloaded&&Date.now()>=retryAt&&window.ConstructionApp?.reload){
+        retryAt=Date.now()+60000;
+        const ok=await window.ConstructionApp.reload({automatic:true});if(ok)reloaded=key;
+      }
+    }finally{busy=false;$('parser-refresh').disabled=false;}
   }
-  document.getElementById('filter-region')?.addEventListener('change',()=>{lastApi=0;latestHeartbeat=null;refresh(true);});
-  document.addEventListener('collection-change',()=>{lastApi=0;latestHeartbeat=null;refresh();});
-  el('parser-refresh').addEventListener('click', () => refresh(true));
-  refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, 20000);
+  let scopeTimer;
+  const scopeChanged=()=>{clearTimeout(scopeTimer);scopeTimer=setTimeout(()=>{lastApi=0;heartbeat=null;refresh();},400);};
+  $('filter-region')?.addEventListener('change',scopeChanged);
+  document.addEventListener('collection-change',scopeChanged);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  $('parser-refresh').addEventListener('click',()=>refresh(true));
+  window.ParserStatus={refresh};
+  refresh();setInterval(()=>{if(!document.hidden)refresh();},10000);setInterval(()=>{if(!document.hidden)clock();},1000);
 })();
-

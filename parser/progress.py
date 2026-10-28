@@ -21,6 +21,7 @@ def snapshot(stage, **fields):
     previous.setdefault('started_at', now)
     previous['region'] = os.environ.get('PARSER_REGION', 'lviv')
     previous['run_id'] = os.environ.get('GITHUB_RUN_ID', 'local')
+    previous['run_number'] = os.environ.get('GITHUB_RUN_NUMBER')
     previous['run_attempt'] = os.environ.get('GITHUB_RUN_ATTEMPT', '1')
     STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATUS_PATH.with_suffix('.tmp')
@@ -80,7 +81,7 @@ def main():
     last_publish = time.monotonic()
     while child.poll() is None:
         time.sleep(2)
-        if time.monotonic() - last_publish >= 60:
+        if time.monotonic() - last_publish >= 30:
             safe_publish()
             last_publish = time.monotonic()
     if child.returncode:
