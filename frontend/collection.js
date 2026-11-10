@@ -77,7 +77,6 @@
     if(!Number.isInteger(days)||days<1||days>90){$('collection-message').textContent='Оберіть період від 1 до 90 днів.';return;}
     $('collection-diagnostics').replaceChildren();
     running=true;draw();$('collection-launch').disabled=true;
-    if($('snapshot-mode'))$('snapshot-mode').value='live';
     const end=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'}),start=new Date(Date.parse(end)-days*86400000).toISOString().slice(0,10);
     const items=new Map(),seen=new Set(),excluded=new Set(window.DatasetManager?.excludedIds||[]);
     let processed=0,skipped=0,filtered=0,complete=false,completedRegions=0;

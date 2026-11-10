@@ -146,9 +146,11 @@
     .snapshot-row label { display:flex; align-items:center; gap:.5rem; }
     #snapshot-list { margin-top:.6rem; max-height:180px; overflow:auto; }
     .collection-loading[hidden] { display:none; }
-    .collection-loading { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:1rem; background:rgba(8,15,25,.94); }
-    .collection-loading-card { width:min(100%,560px); padding:2rem; border:1px solid var(--border); border-radius:16px; background:var(--card); }
-    .collection-loading-card progress { width:100%; height:20px; accent-color:#3b82f6; }
+    .collection-loading { margin:.5rem 1rem; }
+    .collection-loading-card { padding:.8rem 1rem; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:.85rem; }
+    .collection-loading-card h2 { margin:0 0 .4rem; font-size:1rem; }
+    .collection-loading-card p { margin:.35rem 0; }
+    .collection-loading-card progress { width:100%; height:10px; accent-color:#3b82f6; }
     .collection-loading-card small { color:var(--muted); line-height:1.6; }
     .collection-panel { margin:.5rem 1rem; padding:.75rem; border:1px solid var(--border); border-radius:8px; font-size:.85rem; }
     .collection-panel summary { cursor:pointer; font-weight:600; }.collection-actions { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
@@ -227,12 +229,12 @@
   </details>
   <div id="collection-loading" hidden class="collection-loading" role="status" aria-live="polite">
     <div class="collection-loading-card">
-      <h2>Збираємо об’єкти будівництва</h2>
+      <h2>Парсинг триває у фоні</h2>
       <p id="collection-loading-stage">Підключення до реєстру…</p>
       <progress id="collection-loading-bar" max="100" aria-label="Хід парсингу"></progress>
       <p id="collection-loading-count">Визначаємо кількість документів…</p>
       <p id="collection-loading-eta">Орієнтовний час: оцінюємо…</p>
-      <small>Залишайте вкладку відкритою. Карта й таблиця оновляться після завершення збору. Час може змінюватися залежно від відповіді реєстру.</small>
+      <small>Можна працювати з попередніми даними. Залишайте вкладку відкритою; нові результати з’являться після завершення збору. Час приблизний.</small>
     </div>
   </div>
   <details class="collection-panel" open>
@@ -302,11 +304,11 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261110-6"></script>
-  <script defer src="datasets.js?v=20261110-6"></script>
-  <script defer src="collection.js?v=20261110-6"></script>
-  <script defer src="app.js?v=20261110-6"></script>
-  <script defer src="snapshots.js?v=20261110-6"></script>
+  <script defer src="geo.js?v=20261110-7"></script>
+  <script defer src="datasets.js?v=20261110-7"></script>
+  <script defer src="collection.js?v=20261110-7"></script>
+  <script defer src="app.js?v=20261110-7"></script>
+  <script defer src="snapshots.js?v=20261110-7"></script>
 
 </body>
 </html>
