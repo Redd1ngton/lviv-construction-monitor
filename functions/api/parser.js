@@ -11,7 +11,7 @@ export async function onRequest({request}){
     const region=p.get('region'),start=p.get('start'),end=p.get('end'),page=Number(p.get('page'));
     const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')&&Number.isFinite(Date.parse(s));
     if(!Object.hasOwn(regions,region)||!validDate(start)||!validDate(end)||start>end||Date.parse(end)-Date.parse(start)>90*86400000||!Number.isInteger(page)||page<1||page>1000)return json({message:'Некоректні параметри пошуку.'},400);
-    target=`${BASE}/document/optype=100/filter=${encodeURIComponent(`1061_${regions[region]},1060_1,1057_${start}_${end}`)}/page=${page}`;
+    target=`${BASE}/document/optype=100/filter=${encodeURIComponent(`1061_${regions[region]},1060_1,1057_${start}_${end}`)}${page===1?'':'/page='+page}`;
   }else if(p.get('action')==='detail'){
     const id=p.get('id');
     if(!/^[a-zA-Z0-9_-]{1,100}$/.test(id||''))return json({message:'Некоректний номер картки.'},400);
@@ -29,7 +29,7 @@ export async function onRequest({request}){
       if(next.origin!==BASE||next.username||next.password||!/^\/(document\/|document_detail\/)/.test(next.pathname))return json({message:'Реєстр перенаправляє на недоступну сторінку.'},502);
       target=next.href;
     }
-    if(!response.ok)return json({message:'Реєстр тимчасово недоступний. Спробуйте пізніше.'},502);
+    if(!response.ok)return json({upstream_status:response.status,message:`Реєстр тимчасово недоступний (HTTP ${response.status}).`},response.status===429?429:502);
     const html=await response.text();
     if(html.length>5000000)return json({message:'Відповідь реєстру завелика.'},502);
     return json({html,url:target});
