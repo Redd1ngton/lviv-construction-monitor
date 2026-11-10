@@ -17,7 +17,7 @@
       }
       clean.doc_number=key(item);seen.set(clean.doc_number,clean);
     }
-    return {updated_at:typeof data.updated_at==='string'?data.updated_at:null,region:typeof data.region==='string'?data.region:'Львівська область',items:[...seen.values()]};
+    return {partial:data.partial===true,updated_at:typeof data.updated_at==='string'?data.updated_at:null,region:typeof data.region==='string'?data.region:'Львівська область',items:[...seen.values()]};
   }
   function changed(a,b){return fields.some(name=>JSON.stringify(a[name]??'')!==JSON.stringify(b[name]??''));}
   function combine(datasets,baseline,mode) {

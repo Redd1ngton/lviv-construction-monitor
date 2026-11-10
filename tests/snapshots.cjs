@@ -15,5 +15,10 @@ vm.runInNewContext(fs.readFileSync(__dirname+'/../frontend/snapshots.js','utf8')
  const baseline=byId('snapshot-baseline').children.find(option=>option.textContent==='old.json');assert(baseline);
  byId('snapshot-baseline').value=baseline.value;byId('snapshot-mode').value='new';byId('snapshot-mode').handlers.change();assert.deepEqual(displayed.map(x=>x.doc_number),['B']);
  byId('snapshot-mode').value='changed';byId('snapshot-mode').handlers.change();assert.deepEqual(displayed.map(x=>x.doc_number),['A']);
+ await byId('exclusion-import').handlers.change({target:{files:[files[0]],value:'files'}});
+ byId('exclusion-apply').handlers.click();
+ assert.deepEqual([...context.DatasetManager.excludedIds],['A']);
+ context.DatasetManager.setLive(live);byId('snapshot-mode').value='live';byId('snapshot-mode').handlers.change();assert.deepEqual(displayed.map(x=>x.doc_number),['B']);
+ byId('exclusion-clear').handlers.click();assert.equal(displayed.length,2);
  console.log('Snapshot save/export, multiple imports and comparison UI with unavailable browser storage: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});
