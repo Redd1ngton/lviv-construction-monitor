@@ -120,7 +120,7 @@ function filteredItems() {
 function resetFilters() {
   for(const id of ['search','filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).value='';
   const available=[...new Set(items.map(it=>it.region_key).filter(Boolean))];
-  if(window.CollectionManager?.reset)window.CollectionManager.reset(available.includes('lviv')?['lviv']:available.slice(0,1));
+  if(window.CollectionManager?.reset)window.CollectionManager.reset(available);
   refresh();
 }
 function filterSummary() {

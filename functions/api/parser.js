@@ -12,6 +12,10 @@ export async function onRequest({request}){
     const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')&&Number.isFinite(Date.parse(s));
     if(!Object.hasOwn(regions,region)||!validDate(start)||!validDate(end)||start>end||Date.parse(end)-Date.parse(start)>90*86400000||!Number.isInteger(page)||page<1||page>1000)return json({message:'Некоректні параметри пошуку.'},400);
     target=`${BASE}/document/optype=100/filter=${encodeURIComponent(`1061_${regions[region]},1060_1,1057_${start}_${end}`)}${page===1?'':'/page='+page}`;
+  }else if(p.get('action')==='parcel'){
+    const number=p.get('number');
+    if(!/^\d{10}:\d{2}:\d{3}:\d{4}$/.test(number||''))return json({message:'Некоректний кадастровий номер.'},400);
+    target=`${BASE}/api-user/gis-url-proxy?cadparcel=${encodeURIComponent(number)}`;
   }else if(p.get('action')==='detail'){
     const id=p.get('id');
     if(!/^[a-zA-Z0-9_-]{1,100}$/.test(id||''))return json({message:'Некоректний номер картки.'},400);
@@ -34,6 +38,13 @@ export async function onRequest({request}){
       const code=status===429?'RATE_LIMIT':status===401||status===403?'ACCESS_DENIED':status===404?'NOT_FOUND':status>=500?'REGISTRY_FAILURE':'REQUEST_REJECTED';
       const advice=code==='RATE_LIMIT'?'Реєстр обмежив частоту запитів. Зачекайте кілька хвилин і повторіть пошук.':code==='ACCESS_DENIED'?'Реєстр відмовив у доступі серверу. Зміна фільтрів не усуне цю причину.':code==='NOT_FOUND'?'Сторінка або картка відсутня. Потрібно перевірити адресу джерела.':code==='REGISTRY_FAILURE'?'Збій на боці реєстру. Повторіть пошук пізніше; причина не підтверджує помилку фільтрів.':'Реєстр відхилив запит. Потрібно перевірити параметри запиту.';
       return json({code,advice,source_url:target,upstream_status:status,retryable:status===429||status>=500,message:`Реєстр повернув HTTP ${status}.`},status===429?429:502);
+    }
+    if(p.get('action')==='parcel'){
+      const payload=await response.json(),coords=payload?.centroid?.coordinates;
+      const valid=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=44&&lat<=53&&lon>=22&&lon<=41;
+      let point=null;
+      if(Array.isArray(coords)&&coords.length===2){const [a,b]=coords.map(Number);if(valid(a,b))point={lat:a,lon:b,coord_source:'registry_parcel'};else if(valid(b,a))point={lat:b,lon:a,coord_source:'registry_parcel'};}
+      return json({point,url:target});
     }
     const html=await response.text();
     if(html.length>5000000)return json({message:'Відповідь реєстру завелика.'},502);

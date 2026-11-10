@@ -22,6 +22,7 @@ jobs:
       - run: node tests/frontend.cjs
       - run: node tests/datasets.cjs
       - run: node tests/collection.cjs
+      - run: node tests/collection-points.cjs
       - run: node tests/snapshots.cjs
       - run: node tests/status.cjs
       - run: node tests/parser-api.mjs
