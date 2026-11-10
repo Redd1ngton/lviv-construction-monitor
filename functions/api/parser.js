@@ -15,7 +15,7 @@ export async function onRequest({request}){
   }else if(p.get('action')==='detail'){
     const id=p.get('id');
     if(!/^[a-zA-Z0-9_-]{1,100}$/.test(id||''))return json({message:'Некоректний номер картки.'},400);
-    target=`${BASE}/document_detail/doc_id=${id}`;
+    target=`${BASE}/document_detail/doc_id=${id}/optype=100`;
   }else return json({message:'Невідома дія.'},400);
   try{
     const signal=AbortSignal.timeout(25000);
