@@ -43,17 +43,6 @@
     throw lastError;
   }
   const clean=node=>(node?.textContent||'').replace(/\s+/g,' ').trim();
-  function coordinates(doc){
-    const valid=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=44&&lat<=53&&lon>=22&&lon<=41;
-    const points=new Map(),add=(lat,lon)=>{lat=Number(lat);lon=Number(lon);if(valid(lat,lon))points.set(`${lat},${lon}`,{lat,lon,coord_source:'registry'});};
-    for(const node of doc.querySelectorAll('[data-object-lat][data-object-lon], #object_loc ~ .object-info [data-lat][data-lon]'))add(node.getAttribute('data-object-lat')??node.getAttribute('data-lat'),node.getAttribute('data-object-lon')??node.getAttribute('data-lon'));
-    const section=doc.querySelector('#object_loc')?.parentElement;
-    if(section)for(const node of section.querySelectorAll('[data-geometry], [data-geojson], script[type="application/json"]')){
-      try{let g=JSON.parse(node.getAttribute('data-geometry')||node.getAttribute('data-geojson')||node.textContent);if(g.type==='Feature')g=g.geometry;if(g?.type==='Point')add(g.coordinates[1],g.coordinates[0]);}catch(_){}
-    }
-    for(const script of doc.querySelectorAll('script'))for(const match of script.textContent.matchAll(/L\.marker\(\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/g))add(match[1],match[2]);
-    return points.size===1?[...points.values()][0]:{};
-  }
   function detail(html,url,region){
     const doc=new DOMParser().parseFromString(html,'text/html'),fields=new Map();
     for(const row of doc.querySelectorAll('.object-info-item')){
@@ -64,7 +53,7 @@
     const number=field('Реєстраційний номер в ЄДЕССБ');if(!/^[А-ЯІЇЄҐA-Z]{1,3}\d{8,}$/.test(number))throw Error('Не вдалося прочитати картку реєстру.');
     const date=field('Дата реєстрації в ЄДЕССБ','Дата реєстрації').match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
     const parcels=[...new Set((doc.body?.textContent||'').match(/\b\d{10}:\d{2}:\d{3}:\d{4}\b/g)||[])];
-    return {...coordinates(doc),cadastral_numbers:parcels,doc_number:number,reg_date:date?`${date[3]}-${date[2].padStart(2,'0')}-${date[1].padStart(2,'0')}`:null,object_name:field("Назва об'єкта","Назва об'єкта будівництва"),address:field('Адреса'),status:field('Статус документу','Статус документа'),doc_type:field('Тип'),org_issuer:field('Орган, що видав'),customer:[...doc.querySelectorAll('#applicants_info + table tbody tr td:first-child')].map(clean).join('; '),location_description:field('Опис місцезнаходження'),region_key:region,region:regions[region],detail_url:url};
+    return {cadastral_numbers:parcels,doc_number:number,reg_date:date?`${date[3]}-${date[2].padStart(2,'0')}-${date[1].padStart(2,'0')}`:null,object_name:field("Назва об'єкта","Назва об'єкта будівництва"),address:field('Адреса'),status:field('Статус документу','Статус документа'),doc_type:field('Тип'),org_issuer:field('Орган, що видав'),customer:[...doc.querySelectorAll('#applicants_info + table tbody tr td:first-child')].map(clean).join('; '),location_description:field('Опис місцезнаходження'),region_key:region,region:regions[region],detail_url:url};
   }
   const pause=()=>new Promise(resolve=>setTimeout(resolve,1200));
   async function start(){
@@ -80,13 +69,24 @@
     let processed=0,skipped=0,filtered=0,complete=false,completedRegions=0;
     const failures=[];
     const publish=()=>window.DatasetManager?.setLive({updated_at:new Date().toISOString(),region:scope.map(k=>regions[k]).join(', '),partial:!complete,items:[...items.values()]});
-    const jobs=scope.map(region=>({region,page:1})),signatures=new Map(scope.map(region=>[region,new Set()])),parcelCache=new Map();
-    let located=0,parcelBlocked=false;
+    const jobs=scope.map(region=>({region,page:1})),signatures=new Map(scope.map(region=>[region,new Set()]));
+    let located=0;
+    const geo=window.ConstructionGeo;
+    let placeLookup=new Map();
+    if(geo){
+      $('collection-message').textContent='Завантажую довідники населених пунктів для карти…';
+      const placeRows=[];
+      await Promise.all(scope.map(async region=>{
+        try{const response=await fetch('./places/'+region+'.json',{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error();const data=await response.json();placeRows.push(...data.places.filter(place=>Array.isArray(place.names)&&Number.isFinite(place.lat)&&Number.isFinite(place.lon)));}
+        catch(_){diagnose({message:'Не вдалося завантажити довідник населених пунктів.',advice:'Документи збиратимуться далі. Оновіть сторінку для повторного завантаження довідника карти.'},regions[region]);}
+      }));
+      placeLookup=geo.index(placeRows);
+    }
     try{
       while(jobs.length){
         const {region,page}=jobs.shift();
         try{
-          $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · сторінка ${page} · оброблено ${processed} · знайдено ${items.size} · з координатами реєстру ${located}.`;
+          $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · сторінка ${page} · оброблено ${processed} · знайдено ${items.size} · на карті за населеним пунктом ${located}.`;
           const result=await api({action:'list',region,start,end,page});
           const doc=new DOMParser().parseFromString(result.html,'text/html'),list=doc.querySelector('.datasets__list');
           if(!list&&!/^0\s+(записів|записи|запис)$/.test(clean(doc.querySelector('.opendata__top p'))))throw Error('Змінився формат реєстру або доступ обмежено.');
@@ -94,7 +94,7 @@
           const signature=ids.join(',');if(ids.length&&signatures.get(region).has(signature))throw Error('Реєстр повторює сторінки. Ця область зібрана не повністю.');signatures.get(region).add(signature);
           for(const id of ids){
             if(seen.has(id))continue;await pause();
-            $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · оброблено ${processed} · знайдено ${items.size} · з координатами реєстру ${located}. Читаю картку…`;
+            $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · оброблено ${processed} · знайдено ${items.size} · на карті за населеним пунктом ${located}. Читаю картку…`;
             try{
               const card=await api({action:'detail',id}),row=detail(card.html,card.url,region);processed++;seen.add(id);
               if(excluded.has(row.doc_number)){skipped++;continue;}
@@ -102,12 +102,11 @@
               const actualRegion=window.ConstructionGeo?.region(row.address,regions);
               if(actualRegion&&!scope.includes(actualRegion)){filtered++;continue;}
               if(actualRegion){row.region_key=actualRegion;row.region=regions[actualRegion];}
-              if(!Number.isFinite(row.lat)&&row.cadastral_numbers.length===1&&!parcelBlocked){
-                const number=row.cadastral_numbers[0];
-                try{
-                  if(!parcelCache.has(number)){await pause();parcelCache.set(number,(await api({action:'parcel',number})).point);}
-                  if(parcelCache.get(number))Object.assign(row,parcelCache.get(number));
-                }catch(error){if(error.code==='ACCESS_DENIED')parcelBlocked=true;diagnose(error,`${regions[region]} · координати ділянки ${number}. Документ збережено без підтвердженої точки.`);}
+              if(geo){
+                row.settlement=geo.settlement(row.address)||geo.settlement(row.location_description)||geo.settlement(row.object_name);
+                row.district=geo.district(row.address);
+                const point=geo.locate(row,placeLookup);
+                if(point)Object.assign(row,point);
               }
               items.set(row.doc_number,row);if(Number.isFinite(row.lat))located++;
               publish();
@@ -124,7 +123,7 @@
       if(completedRegions||processed)publish();
       if(!complete){$('collection-message').textContent=`Збір неповний: ${items.size} записів, помилок: ${failures.length}. ${failures.slice(0,3).join('; ')}. Причини та подальші дії — у повідомленнях вище. ${completedRegions||processed?'Отримані записи можна зберегти.':'Нових результатів немає; попередні дані залишено.'}`;return;}
       if(!items.size){const note=document.createElement('p');note.textContent=`За вибраними умовами немає нових записів. Виключено вашим файлом: ${skipped}; не відповідають статусу «Діючий» або періоду: ${filtered}. Спробуйте збільшити період, вибрати іншу область або скасувати виключення. Фільтри таблиці та карти не впливають на запити до реєстру.`;$('collection-diagnostics').appendChild(note);}
-      publish();$('collection-message').textContent=`Готово: ${items.size} записів з усіх ${scope.length} областей; координати реєстру: ${located}. Виключено: ${skipped}. Натисніть «Зберегти результати».`;
+      publish();$('collection-message').textContent=`Готово: ${items.size} записів з усіх ${scope.length} областей; приблизні точки на карті: ${located}. Виключено: ${skipped}. Натисніть «Зберегти результати».`;
     }catch(error){if(processed)publish();$('collection-message').textContent=error.message+(processed?' Збір неповний; отримані записи можна зберегти.':' Попередні результати залишено.');}
     finally{running=false;draw();$('collection-launch').disabled=false;}
   }

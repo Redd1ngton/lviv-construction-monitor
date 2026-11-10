@@ -59,7 +59,7 @@ async function loadData(force=false, automatic=false) {
 }
 function prepareItems(rows) {
   return rows.map(row => {
-        const it = {...row, ...geo.address(row), region_key:row.region_key || geo.region(row.address,regionNames), settlement:geo.settlement(row.address), district:geo.district(row.address), object_category:geo.category(row.object_name)};
+        const it = {...row, ...geo.address(row), region_key:row.region_key || geo.region(row.address,regionNames), settlement:row.settlement||geo.settlement(row.address)||geo.settlement(row.location_description)||geo.settlement(row.object_name), district:geo.district(row.address), object_category:geo.category(row.object_name)};
         it.original_coords = hasCoordinates(it) ? {lat:it.lat, lon:it.lon} : null;
         const approximate = !hasCoordinates(it) && geo.locate(it, placeLookup);
         if (approximate) Object.assign(it, approximate);
