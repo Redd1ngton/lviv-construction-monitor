@@ -15,6 +15,16 @@
     try{localStorage.setItem('construction-regions-v1',JSON.stringify([...selected]));}catch(_){}
     document.dispatchEvent(new Event('collection-change'));
   }
+  function diagnose(error,context){
+    const panel=$('collection-diagnostics'),entry=document.createElement('div');
+    entry.className='collection-panel';
+    const title=document.createElement('strong');title.textContent=context;
+    const reason=document.createElement('p');reason.textContent=error.message;
+    const advice=document.createElement('p');advice.textContent=error.advice||'Не вдалося розпізнати відповідь реєстру. Потрібно перевірити формат сторінки; зміна фільтрів може не допомогти.';
+    entry.append(title,reason,advice);
+    if(error.source_url){const link=document.createElement('a');link.href=error.source_url;link.target='_blank';link.rel='noopener';link.textContent='Відкрити запит у реєстрі';entry.appendChild(link);}
+    panel.appendChild(entry);
+  }
   async function api(params){
     let lastError;
     for(let attempt=0;attempt<3;attempt++){
@@ -23,8 +33,8 @@
         let data;try{data=await response.json();}catch(_){throw Error('Сервер пошуку повернув некоректну відповідь.');}
         if(response.ok)return data;
         const error=Error(data.message||'Помилка реєстру.');
-        error.retryable=response.status===429||response.status>=500;throw error;
-      }catch(error){lastError=error;if(error.retryable===false)throw error;}
+        error.retryable=data.retryable??(response.status===429||response.status>=500);error.code=data.code;error.advice=data.advice;error.source_url=data.source_url;throw error;
+      }catch(error){lastError=error;if(!error.advice)error.advice='Перевірте інтернет-з’єднання. Якщо сайт доступний, повторіть пошук пізніше: сервер або реєстр міг не відповісти вчасно.';if(error.retryable===false)throw error;}
       if(attempt<2){
         $('collection-message').textContent=`Реєстр не відповів. Повторна спроба ${attempt+2} із 3…`;
         await new Promise(resolve=>setTimeout(resolve,3000*(attempt+1)));
@@ -50,11 +60,12 @@
     const scope=[...selected],days=Number($('collection-days').value);
     if(!scope.length){$('collection-message').textContent='Оберіть хоча б одну область.';return;}
     if(!Number.isInteger(days)||days<1||days>90){$('collection-message').textContent='Оберіть період від 1 до 90 днів.';return;}
+    $('collection-diagnostics').replaceChildren();
     running=true;draw();$('collection-launch').disabled=true;
     if($('snapshot-mode'))$('snapshot-mode').value='live';
     const end=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'}),start=new Date(Date.parse(end)-days*86400000).toISOString().slice(0,10);
     const items=new Map(),seen=new Set(),excluded=new Set(window.DatasetManager?.excludedIds||[]);
-    let processed=0,skipped=0,complete=false,completedRegions=0;
+    let processed=0,skipped=0,filtered=0,complete=false,completedRegions=0;
     const failures=[];
     const publish=()=>window.DatasetManager?.setLive({updated_at:new Date().toISOString(),region:scope.map(k=>regions[k]).join(', '),partial:!complete,items:[...items.values()]});
     try{
@@ -74,20 +85,21 @@
             try{
             const card=await api({action:'detail',id}),row=detail(card.html,card.url,region);processed++;seen.add(id);
             if(excluded.has(row.doc_number)){skipped++;continue;}
-            if(row.status==='Діючий'&&row.reg_date>=start&&row.reg_date<=end)items.set(row.doc_number,row);
+            if(row.status==='Діючий'&&row.reg_date>=start&&row.reg_date<=end)items.set(row.doc_number,row);else filtered++;
             if(processed%10===0)publish();
-            }catch(error){failures.push(`${regions[region]} · картка ${id}: ${error.message}`);publish();}
+            }catch(error){failures.push(`${regions[region]} · картка ${id}: ${error.message}`);diagnose(error,`${regions[region]} · сторінка ${page} · картка ${id}`);if(processed)publish();}
           }
           if(!doc.querySelector('.pagination__next:not(.disabled) a[filter-user]'))break;
           if(page===1000)throw Error('Досягнуто ліміт сторінок. Скоротіть період пошуку.');
           await pause();
         }
         completedRegions++;
-        }catch(error){failures.push(`${regions[region]}: ${error.message}`);}
+        }catch(error){failures.push(`${regions[region]}: ${error.message}`);diagnose(error,`${regions[region]} · список документів · період ${start} — ${end}`);}
       }
       complete=failures.length===0;
       if(completedRegions||processed)publish();
-      if(!complete){$('collection-message').textContent=`Збір неповний: ${items.size} записів, помилок: ${failures.length}. ${failures.slice(0,3).join('; ')}. Отримані записи можна зберегти. Повторіть пошук пізніше.`;return;}
+      if(!complete){$('collection-message').textContent=`Збір неповний: ${items.size} записів, помилок: ${failures.length}. ${failures.slice(0,3).join('; ')}. Причини та подальші дії — у повідомленнях вище. ${completedRegions||processed?'Отримані записи можна зберегти.':'Нових результатів немає; попередні дані залишено.'}`;return;}
+      if(!items.size){const note=document.createElement('p');note.textContent=`За вибраними умовами немає нових записів. Виключено вашим файлом: ${skipped}; не відповідають статусу «Діючий» або періоду: ${filtered}. Спробуйте збільшити період, вибрати іншу область або скасувати виключення. Фільтри таблиці та карти не впливають на запити до реєстру.`;$('collection-diagnostics').appendChild(note);}
       publish();$('collection-message').textContent=`Готово: ${items.size} записів. Виключено: ${skipped}. Натисніть «Зберегти результати».`;
     }catch(error){if(processed)publish();$('collection-message').textContent=error.message+(processed?' Збір неповний; отримані записи можна зберегти.':' Попередні результати залишено.');}
     finally{running=false;draw();$('collection-launch').disabled=false;}

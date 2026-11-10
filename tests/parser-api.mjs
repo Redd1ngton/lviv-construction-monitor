@@ -23,4 +23,11 @@ let loops=0;globalThis.fetch=async()=>{loops++;return new Response(null,{status:
 assert.equal((await get('?action=detail&id=12345')).status,502);assert.equal(loops,5);
 globalThis.fetch=async()=>new Response('',{status:503});
 assert.equal((await get('?action=detail&id=12345')).status,502);
+globalThis.fetch=async()=>new Response('',{status:403});
+let problem=await (await get('?action=detail&id=12345')).json();
+assert.equal(problem.code,'ACCESS_DENIED');assert.equal(problem.retryable,false);assert(problem.advice.includes('фільтрів'));assert(problem.source_url.startsWith('https://e-construction.gov.ua/'));
+globalThis.fetch=async()=>new Response('',{status:429});
+problem=await (await get('?action=detail&id=12345')).json();assert.equal(problem.code,'RATE_LIMIT');assert.equal(problem.retryable,true);
+globalThis.fetch=async()=>{const e=Error('timeout');e.name='TimeoutError';throw e;};
+problem=await (await get('?action=detail&id=12345')).json();assert.equal(problem.code,'TIMEOUT');assert(problem.advice);
 console.log('Direct registry API: no secrets, bounded scope, host validation and upstream errors passed');

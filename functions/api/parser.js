@@ -29,9 +29,14 @@ export async function onRequest({request}){
       if(next.origin!==BASE||next.username||next.password||!/^\/(document\/|document_detail\/)/.test(next.pathname))return json({message:'Реєстр перенаправляє на недоступну сторінку.'},502);
       target=next.href;
     }
-    if(!response.ok)return json({upstream_status:response.status,message:`Реєстр тимчасово недоступний (HTTP ${response.status}).`},response.status===429?429:502);
+    if(!response.ok){
+      const status=response.status;
+      const code=status===429?'RATE_LIMIT':status===401||status===403?'ACCESS_DENIED':status===404?'NOT_FOUND':status>=500?'REGISTRY_FAILURE':'REQUEST_REJECTED';
+      const advice=code==='RATE_LIMIT'?'Реєстр обмежив частоту запитів. Зачекайте кілька хвилин і повторіть пошук.':code==='ACCESS_DENIED'?'Реєстр відмовив у доступі серверу. Зміна фільтрів не усуне цю причину.':code==='NOT_FOUND'?'Сторінка або картка відсутня. Потрібно перевірити адресу джерела.':code==='REGISTRY_FAILURE'?'Збій на боці реєстру. Повторіть пошук пізніше; причина не підтверджує помилку фільтрів.':'Реєстр відхилив запит. Потрібно перевірити параметри запиту.';
+      return json({code,advice,source_url:target,upstream_status:status,retryable:status===429||status>=500,message:`Реєстр повернув HTTP ${status}.`},status===429?429:502);
+    }
     const html=await response.text();
     if(html.length>5000000)return json({message:'Відповідь реєстру завелика.'},502);
     return json({html,url:target});
-  }catch(_){return json({message:'Не вдалося отримати відповідь реєстру. Повторіть спробу.'},502);}
+  }catch(error){const timeout=error.name==='TimeoutError'||error.name==='AbortError';return json({code:timeout?'TIMEOUT':'CONNECTION_FAILED',retryable:true,source_url:target,message:timeout?'Реєстр не відповів за 25 секунд.':'Не вдалося з’єднатися з реєстром.',advice:'Повторіть пошук пізніше. Можна спробувати одну область і коротший період для перевірки; вплив фільтрів на збій не підтверджено.'},502);}
 }

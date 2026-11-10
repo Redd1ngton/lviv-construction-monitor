@@ -229,6 +229,7 @@
       <label>За останні дні<input id="collection-days" type="number" min="1" max="90" value="7"></label>
       <button id="collection-launch" type="button">Запустити парсер</button>
     </div>
+    <div id="collection-diagnostics" role="status" aria-live="polite"></div>
     <p id="collection-message" role="status">Галочки визначають області пошуку. Натисніть «Почати збір обраних регіонів», щоб отримати нові дані.</p>
   </details>
   <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
@@ -286,11 +287,11 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261110-2"></script>
-  <script defer src="datasets.js?v=20261110-2"></script>
-  <script defer src="collection.js?v=20261110-2"></script>
-  <script defer src="app.js?v=20261110-2"></script>
-  <script defer src="snapshots.js?v=20261110-2"></script>
+  <script defer src="geo.js?v=20261110-3"></script>
+  <script defer src="datasets.js?v=20261110-3"></script>
+  <script defer src="collection.js?v=20261110-3"></script>
+  <script defer src="app.js?v=20261110-3"></script>
+  <script defer src="snapshots.js?v=20261110-3"></script>
 
 </body>
 </html>
