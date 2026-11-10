@@ -37,10 +37,24 @@
       }catch(error){lastError=error;if(!error.advice)error.advice='Перевірте інтернет-з’єднання. Якщо сайт доступний, повторіть пошук пізніше: сервер або реєстр міг не відповісти вчасно.';if(error.retryable===false)throw error;}
       if(attempt<2){
         $('collection-message').textContent=`Реєстр не відповів. Повторна спроба ${attempt+2} із 3…`;
+        $('collection-loading-stage').textContent=`Очікуємо реєстр · повторна спроба ${attempt+2} із 3…`;
         await new Promise(resolve=>setTimeout(resolve,3000*(attempt+1)));
       }
     }
     throw lastError;
+  }
+  function loadingView(state){
+    const known=state.counts.size===state.regionCount&&[...state.counts.values()].every(Number.isFinite);
+    const total=[...state.counts.values()].reduce((sum,n)=>sum+(n||0),0),elapsed=(Date.now()-state.started)/1000;
+    $('collection-loading-stage').textContent=state.stage;
+    $('collection-loading-count').textContent=`Оброблено документів: ${state.attempted}${known?' із приблизно '+Math.max(total,state.attempted):''} · знайдено: ${state.found}`;
+    const bar=$('collection-loading-bar');
+    if(known&&total>0){bar.value=Math.min(99,Math.round(state.attempted/total*100));}
+    else bar.removeAttribute('value');
+    if(known&&state.attempted>=3&&total>state.attempted){
+      const seconds=Math.max(1,Math.ceil(elapsed/state.attempted*(total-state.attempted)));
+      $('collection-loading-eta').textContent='Орієнтовно залишилося: '+(seconds<60?'менше хвилини':Math.ceil(seconds/60)+' хв');
+    }else $('collection-loading-eta').textContent=known&&state.attempted>=total?'Завершуємо обробку…':'Орієнтовний час: оцінюємо обсяг і швидкість реєстру…';
   }
   const clean=node=>(node?.textContent||'').replace(/\s+/g,' ').trim();
   function detail(html,url,region){
@@ -69,10 +83,13 @@
     let processed=0,skipped=0,filtered=0,complete=false,completedRegions=0;
     const failures=[];
     const publish=()=>window.DatasetManager?.setLive({updated_at:new Date().toISOString(),region:scope.map(k=>regions[k]).join(', '),partial:!complete,items:[...items.values()]});
+    const progress={started:Date.now(),counts:new Map(),regionCount:scope.length,attempted:0,found:0,stage:'Підготовка довідників населених пунктів…'};
+    $('collection-loading').hidden=false;loadingView(progress);
     const jobs=scope.map(region=>({region,page:1})),signatures=new Map(scope.map(region=>[region,new Set()]));
     let located=0;
     const geo=window.ConstructionGeo;
     let placeLookup=new Map();
+    try{
     if(geo){
       $('collection-message').textContent='Завантажую довідники населених пунктів для карти…';
       const placeRows=[];
@@ -82,18 +99,20 @@
       }));
       placeLookup=geo.index(placeRows);
     }
-    try{
       while(jobs.length){
         const {region,page}=jobs.shift();
         try{
           $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · сторінка ${page} · оброблено ${processed} · знайдено ${items.size} · на карті за населеним пунктом ${located}.`;
+          progress.stage=`Читаємо список · ${regions[region]} · сторінка ${page}`;loadingView(progress);
           const result=await api({action:'list',region,start,end,page});
           const doc=new DOMParser().parseFromString(result.html,'text/html'),list=doc.querySelector('.datasets__list');
           if(!list&&!/^0\s+(записів|записи|запис)$/.test(clean(doc.querySelector('.opendata__top p'))))throw Error('Змінився формат реєстру або доступ обмежено.');
+          if(page===1){const text=clean(doc.querySelector('.opendata__top p'));const match=text.match(/[\d\s\u00a0]+/);const count=match?Number(match[0].replace(/\D/g,'')):NaN;progress.counts.set(region,Number.isFinite(count)&&text?count:null);loadingView(progress);}
           const ids=[...new Set([...doc.querySelectorAll('.datasets__list a[href*="document_detail/doc_id="]')].map(a=>a.getAttribute('href').match(/doc_id=([a-zA-Z0-9_-]+)/)?.[1]).filter(Boolean))];
           const signature=ids.join(',');if(ids.length&&signatures.get(region).has(signature))throw Error('Реєстр повторює сторінки. Ця область зібрана не повністю.');signatures.get(region).add(signature);
           for(const id of ids){
             if(seen.has(id))continue;await pause();
+            progress.stage=`Читаємо документи · ${regions[region]}`;loadingView(progress);
             $('collection-message').textContent=`Спільний збір ${scope.length} областей · ${regions[region]} · оброблено ${processed} · знайдено ${items.size} · на карті за населеним пунктом ${located}. Читаю картку…`;
             try{
               const card=await api({action:'detail',id}),row=detail(card.html,card.url,region);processed++;seen.add(id);
@@ -109,8 +128,8 @@
                 if(point)Object.assign(row,point);
               }
               items.set(row.doc_number,row);if(Number.isFinite(row.lat))located++;
-              publish();
-            }catch(error){failures.push(`${regions[region]} · картка ${id}: ${error.message}`);diagnose(error,`${regions[region]} · сторінка ${page} · картка ${id}`);if(processed)publish();}
+            }catch(error){failures.push(`${regions[region]} · картка ${id}: ${error.message}`);diagnose(error,`${regions[region]} · сторінка ${page} · картка ${id}`);}
+            finally{progress.attempted++;progress.found=items.size;loadingView(progress);}
           }
           if(doc.querySelector('.pagination__next:not(.disabled) a[filter-user]')){
             if(page===1000)throw Error('Досягнуто ліміт сторінок. Скоротіть період пошуку.');
@@ -120,12 +139,12 @@
         }catch(error){failures.push(`${regions[region]}: ${error.message}`);diagnose(error,`${regions[region]} · сторінка ${page} · період ${start} — ${end}`);}
       }
       complete=failures.length===0;
-      if(completedRegions||processed)publish();
+      if(completedRegions||processed){progress.stage='Готуємо карту та таблицю…';loadingView(progress);publish();}
       if(!complete){$('collection-message').textContent=`Збір неповний: ${items.size} записів, помилок: ${failures.length}. ${failures.slice(0,3).join('; ')}. Причини та подальші дії — у повідомленнях вище. ${completedRegions||processed?'Отримані записи можна зберегти.':'Нових результатів немає; попередні дані залишено.'}`;return;}
       if(!items.size){const note=document.createElement('p');note.textContent=`За вибраними умовами немає нових записів. Виключено вашим файлом: ${skipped}; не відповідають статусу «Діючий» або періоду: ${filtered}. Спробуйте збільшити період, вибрати іншу область або скасувати виключення. Фільтри таблиці та карти не впливають на запити до реєстру.`;$('collection-diagnostics').appendChild(note);}
-      publish();$('collection-message').textContent=`Готово: ${items.size} записів з усіх ${scope.length} областей; приблизні точки на карті: ${located}. Виключено: ${skipped}. Натисніть «Зберегти результати».`;
+      $('collection-message').textContent=`Готово: ${items.size} записів з усіх ${scope.length} областей; приблизні точки на карті: ${located}. Виключено: ${skipped}. Натисніть «Зберегти результати».`;
     }catch(error){if(processed)publish();$('collection-message').textContent=error.message+(processed?' Збір неповний; отримані записи можна зберегти.':' Попередні результати залишено.');}
-    finally{running=false;draw();$('collection-launch').disabled=false;}
+    finally{$('collection-loading').hidden=true;running=false;draw();$('collection-launch').disabled=false;}
   }
   async function init(){
     try{const r=await fetch('./regions.json');if(!r.ok)throw Error();regions=await r.json();selected=new Set([...selected].filter(k=>k in regions));draw();}
