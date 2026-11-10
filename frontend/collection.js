@@ -81,7 +81,7 @@
     const failures=[];
     const publish=()=>window.DatasetManager?.setLive({updated_at:new Date().toISOString(),region:scope.map(k=>regions[k]).join(', '),partial:!complete,items:[...items.values()]});
     const jobs=scope.map(region=>({region,page:1})),signatures=new Map(scope.map(region=>[region,new Set()])),parcelCache=new Map();
-    let located=0;
+    let located=0,parcelBlocked=false;
     try{
       while(jobs.length){
         const {region,page}=jobs.shift();
@@ -102,12 +102,12 @@
               const actualRegion=window.ConstructionGeo?.region(row.address,regions);
               if(actualRegion&&!scope.includes(actualRegion)){filtered++;continue;}
               if(actualRegion){row.region_key=actualRegion;row.region=regions[actualRegion];}
-              if(!Number.isFinite(row.lat)&&row.cadastral_numbers.length===1){
+              if(!Number.isFinite(row.lat)&&row.cadastral_numbers.length===1&&!parcelBlocked){
                 const number=row.cadastral_numbers[0];
                 try{
                   if(!parcelCache.has(number)){await pause();parcelCache.set(number,(await api({action:'parcel',number})).point);}
                   if(parcelCache.get(number))Object.assign(row,parcelCache.get(number));
-                }catch(error){diagnose(error,`${regions[region]} · координати ділянки ${number}. Документ збережено без підтвердженої точки.`);}
+                }catch(error){if(error.code==='ACCESS_DENIED')parcelBlocked=true;diagnose(error,`${regions[region]} · координати ділянки ${number}. Документ збережено без підтвердженої точки.`);}
               }
               items.set(row.doc_number,row);if(Number.isFinite(row.lat))located++;
               publish();
