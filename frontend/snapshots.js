@@ -1,5 +1,7 @@
 (() => {
   const core=window.DatasetCore;
+  let excluded=new Set(),pendingExclusions=null;
+  try{excluded=new Set(JSON.parse(localStorage.getItem('construction-exclusions-v1')||'[]'));}catch(_){}
   let live=null,archives=[],active=new Set(),db=null,storageError='';
   const byId=id=>document.getElementById(id);
   function message(text){byId('snapshot-message').textContent=text;}
@@ -40,7 +42,8 @@
     byId('snapshot-save').disabled=!live;
   }
   function exportFile(entry){
-    const payload={format:'lviv-construction-snapshot/v1',updated_at:entry.updated_at,region:entry.region,count:entry.items.length,items:entry.items};
+    const payload={format:'lviv-construction-snapshot/v1',partial:entry.partial===true,updated_at:entry.updated_at,region:entry.region,count:entry.items.length,items:entry.items.filter(row=>!excluded.has(row.doc_number))};
+    payload.count=payload.items.length;
     const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
     const a=document.createElement('a');a.href=url;a.download=`construction-snapshot-${(entry.updated_at||new Date().toISOString()).replace(/[^0-9T-]/g,'-')}.json`;a.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
@@ -50,12 +53,31 @@
     const mode=byId('snapshot-mode').value,baseline=archives.find(item=>item.id===byId('snapshot-baseline').value);
     if(['new','changed'].includes(mode)&&!baseline){window.ConstructionApp.setData([], 'Оберіть попередній знімок для порівняння');message('Оберіть попередній знімок для порівняння.');return;}
     const datasets=mode==='live'?(live?[live]:[]):[...(byId('snapshot-include-live').checked&&live?[live]:[]),...archives.filter(item=>active.has(item.id))];
-    const rows=core.combine(datasets,baseline,mode);
+    const rows=core.combine(datasets,baseline,mode).filter(row=>!excluded.has(row.doc_number));
     window.ConstructionApp.setData(rows,mode==='live'?'Поточний парсер':`Знімків / джерел: ${datasets.length} · ${mode==='new'?'Лише нові':mode==='changed'?'Змінені':'Усі записи'}`);
     message(`${rows.length} записів · ${baseline?'Порівняння з «'+baseline.name+'»':'Обрано джерел: '+datasets.length}${storageError?' · '+storageError:''}`);
   }
-  window.DatasetManager={setLive(data){live=core.parse(data);draw();apply();}};
+  window.DatasetManager={get excludedIds(){return [...excluded];},setLive(data){live=core.parse(data);draw();apply();}};
+  function exclusionMessage(){byId('exclusion-message').textContent=`Виключено записів: ${excluded.size}. Номери документів запам’ятовуються у цьому браузері.`;}
+  function saveExclusions(){try{localStorage.setItem('construction-exclusions-v1',JSON.stringify([...excluded]));}catch(_){byId('exclusion-message').textContent='Виключення діють до закриття вкладки: пам’ять браузера недоступна.';}}
+
   async function init(){
+    exclusionMessage();
+    byId('exclusion-import').addEventListener('change',async event=>{
+      pendingExclusions=null;
+      const ids=new Set();
+      try{
+        for(const file of event.target.files){if(file.size>20*1024*1024)throw Error('Файл більший за 20 МБ.');const parsed=core.parse(JSON.parse(await file.text()));for(const row of parsed.items)ids.add(row.doc_number);}
+        pendingExclusions=ids;byId('exclusion-message').textContent=`Завантажено ${ids.size} записів. Натисніть «Виключити з пошуку».`;
+      }catch(error){byId('exclusion-message').textContent='Файл не завантажено: '+error.message;}
+    });
+    byId('exclusion-apply').addEventListener('click',()=>{
+      if(!pendingExclusions){byId('exclusion-message').textContent='Спочатку завантажте JSON-файл.';return;}
+      for(const id of pendingExclusions)excluded.add(id);
+      pendingExclusions=null;byId('exclusion-import').value='';exclusionMessage();saveExclusions();apply();
+    });
+    byId('exclusion-clear').addEventListener('click',()=>{excluded.clear();pendingExclusions=null;byId('exclusion-import').value='';exclusionMessage();saveExclusions();apply();});
+
     try{db=await database();archives=await transact('readonly',store=>store.getAll());active=new Set(archives.map(item=>item.id));}
     catch(_){storageError='Пам’ять браузера недоступна. Збережіть JSON-файли на пристрій.';}
     draw();

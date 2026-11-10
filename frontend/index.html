@@ -198,22 +198,20 @@
     </div>
   </header>
 
-  <section class="parser-panel" aria-labelledby="parser-heading">
-    <div class="parser-top"><button id="btn-force-refresh" type="button">Оновити дані</button><strong id="parser-heading">Збір даних</strong>
-      <span id="parser-state" role="status" aria-live="polite">Перевіряю стан…</span>
-      <a id="parser-run" href="https://github.com/Redd1ngton/lviv-construction-monitor/actions" target="_blank" rel="noopener">Журнал запуску ↗</a>
-      <button id="parser-refresh" class="secondary" type="button">Оновити статус</button>
-    </div>
-    <ol id="parser-steps" class="parser-steps" aria-label="Етапи збору"></ol>
-    <progress id="parser-progress" max="100" hidden aria-label="Прогрес обробки карток"></progress>
-    <div id="parser-detail">Завантажую стан останнього запуску.</div>
-    <small id="parser-time"></small><small id="parser-age"></small>
+  <p class="collection-note">1. Оберіть області та запустіть парсер. 2. Збережіть результати. 3. Завантажте попередні результати нижче, щоб виключити їх із наступного пошуку. Залишайте вкладку відкритою під час збору.</p>
+  <button id="btn-force-refresh" type="button" class="secondary">Оновити дані</button>
+  <p id="data-refresh-message" role="status"></p>
+  <section class="collection-panel">
+    <h3>Виключити попередні результати</h3>
+    <label>Завантажити збережені JSON-файли <input id="exclusion-import" type="file" accept=".json,application/json" multiple></label>
+    <button id="exclusion-apply" type="button">Виключити з пошуку</button>
+    <button id="exclusion-clear" type="button" class="secondary">Скасувати виключення</button>
+    <p id="exclusion-message" role="status" aria-live="polite">Немає виключених записів.</p>
   </section>
-  <p id="data-refresh-message" class="collection-note" role="status" aria-live="polite">Оновлення завантажує готові результати. Новий збір запускається для обраних регіонів через GitHub.</p>
   <details class="snapshots-panel" open>
     <summary>Знімки парсингу та порівняння</summary>
     <div class="snapshot-controls">
-      <button type="button" id="snapshot-save" disabled>Зберегти поточний збір у JSON</button>
+      <button type="button" id="snapshot-save" disabled>Зберегти результати</button>
       <label class="import-label">Імпортувати JSON-файли<input id="snapshot-import" type="file" accept=".json,application/json" multiple></label>
       <label>Показувати<select id="snapshot-mode"><option value="live">Поточний парсер</option><option value="all">Усі обрані результати разом</option><option value="new">Лише нові відносно знімка</option><option value="changed">Лише змінені записи</option></select></label>
       <label>Порівняти зі знімком<select id="snapshot-baseline"><option value="">Оберіть попередній знімок</option></select></label>
@@ -224,23 +222,14 @@
   </details>
   <details class="collection-panel" open>
     <summary>Регіони збору та пошуку</summary>
-    <p>Відмітьте потрібні області. Щоденний збір за замовчуванням — лише Львівська область. Збір усієї України потребує окремого підтвердження.</p>
+    <p>Відмітьте області та період пошуку. Картки читаються безпосередньо з реєстру. Для великого періоду збір може тривати довго.</p>
     <div class="collection-actions"><button type="button" id="collection-all" class="secondary">Обрати всі</button><button type="button" id="collection-clear" class="secondary">Зняти всі</button><strong id="collection-count"></strong></div>
     <div id="region-checks" class="region-checks"></div>
     <div class="collection-actions">
       <label>За останні дні<input id="collection-days" type="number" min="1" max="90" value="7"></label>
-      <label>Ключ керування<input id="collection-key" type="password" autocomplete="off" placeholder="PARSER_ADMIN_KEY"></label>
-      <button id="collection-launch" type="button">Почати збір обраних регіонів</button>
-      <a href="https://github.com/Redd1ngton/lviv-construction-monitor/actions/workflows/daily-scrape.yml" target="_blank" rel="noopener">Ручний запуск у GitHub ↗</a>
+      <button id="collection-launch" type="button">Запустити парсер</button>
     </div>
-    <p id="collection-backend" role="status">Перевіряю підключення запуску…</p>
     <p id="collection-message" role="status">Галочки визначають області пошуку. Натисніть «Почати збір обраних регіонів», щоб отримати нові дані.</p>
-    <details id="collection-setup"><summary>Одноразове підключення запуску</summary>
-      <p>У Cloudflare Pages → Settings → Variables and Secrets додайте секрети для Production:</p>
-      <ul><li><strong>GITHUB_TOKEN</strong> — fine-grained токен лише цього репозиторію з дозволом Actions: read and write.</li><li><strong>PARSER_ADMIN_KEY</strong> — ваш випадковий ключ керування (рекомендовано від 32 символів). Його вводять у поле вище.</li></ul>
-      <p>Повторно розгорніть сайт. Токен GitHub зберігається тільки на сервері; ключ керування не записується у пам’ять браузера. Не надсилайте секрети в чат.</p>
-    </details>
-    <details><summary>Параметри для ручного запуску</summary><div class="collection-actions"><label>Коди регіонів<input id="collection-codes" readonly></label><button type="button" id="collection-copy">Скопіювати вибір</button></div></details>
   </details>
   <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
   <div id="category-tabs" class="category-tabs" role="tablist" aria-label="Типи об’єктів"></div>
@@ -297,12 +286,12 @@
   </main>
 
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
-  <script defer src="geo.js?v=20261028-4"></script>
-  <script defer src="datasets.js?v=20261028-4"></script>
-  <script defer src="collection.js?v=20261028-4"></script>
-  <script defer src="app.js?v=20261028-4"></script>
-  <script defer src="snapshots.js?v=20261028-4"></script>
-  <script defer src="status.js?v=20261028-4"></script>
+  <script defer src="geo.js?v=20261110-1"></script>
+  <script defer src="datasets.js?v=20261110-1"></script>
+  <script defer src="collection.js?v=20261110-1"></script>
+  <script defer src="app.js?v=20261110-1"></script>
+  <script defer src="snapshots.js?v=20261110-1"></script>
+
 </body>
 </html>
 
