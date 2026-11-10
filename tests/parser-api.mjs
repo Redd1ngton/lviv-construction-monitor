@@ -12,7 +12,7 @@ assert.equal(calls.length,0);
 assert.equal((await get('?action=list&region=lviv&start=2026-11-01&end=2026-11-10&page=1')).status,200);
 assert(calls[0].startsWith('https://e-construction.gov.ua/document/'));
 assert.equal((await get('?action=detail&id=12345')).status,200);
-assert.equal(calls[1],'https://e-construction.gov.ua/document_detail/doc_id=12345');
+assert.equal(calls[1],'https://e-construction.gov.ua/document_detail/doc_id=12345/optype=100');
 let redirects=0;
 globalThis.fetch=async(url,options)=>{assert.equal(options.redirect,'manual');redirects++;return redirects===1?new Response(null,{status:302,headers:{Location:'/document/optype=100/filter=test'}}):new Response('registry');};
 assert.equal((await get('?action=list&region=lviv&start=2026-11-01&end=2026-11-10&page=1')).status,200);
