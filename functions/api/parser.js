@@ -18,7 +18,17 @@ export async function onRequest({request}){
     target=`${BASE}/document_detail/doc_id=${id}`;
   }else return json({message:'Невідома дія.'},400);
   try{
-    const response=await fetch(target,{redirect:'error',signal:AbortSignal.timeout(25000),headers:{'User-Agent':'ConstructionMonitor/3.0','Accept':'text/html'}});
+    const signal=AbortSignal.timeout(25000);
+    let response;
+    for(let hop=0;hop<5;hop++){
+      response=await fetch(target,{redirect:'manual',signal,headers:{'User-Agent':'ConstructionMonitor/3.0','Accept':'text/html'}});
+      if(![301,302,303,307,308].includes(response.status))break;
+      const location=response.headers.get('Location');
+      if(!location)return json({message:'Реєстр повернув некоректне перенаправлення.'},502);
+      const next=new URL(location,target);
+      if(next.origin!==BASE||next.username||next.password||!/^\/(document\/|document_detail\/)/.test(next.pathname))return json({message:'Реєстр перенаправляє на недоступну сторінку.'},502);
+      target=next.href;
+    }
     if(!response.ok)return json({message:'Реєстр тимчасово недоступний. Спробуйте пізніше.'},502);
     const html=await response.text();
     if(html.length>5000000)return json({message:'Відповідь реєстру завелика.'},502);
