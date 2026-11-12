@@ -36,3 +36,34 @@ assert.equal((await get('?action=parcel&number=invalid')).status,400);
 globalThis.fetch=async()=>Response.json({centroid:{coordinates:[0,0]}});
 problem=await (await get('?action=parcel&number=4625384800%3A05%3A002%3A0016')).json();assert.equal(problem.point,null);
 console.log('Direct registry API: no secrets, bounded scope, host validation and upstream errors passed');
+
+const { onRequest: getLun } = await import('../functions/api/lun.js');
+const photo = 'https://market-images.lunstatic.net/lun-ua/960/1280/images/offers/123.jpg';
+const card = {
+  id: 42, location: [30.25, 50.25], header: 'Садова',
+  urlRaw: 'https://example.com/houses/view/42', price: 52000, currency: 'usd',
+  images: [{ imageId: 'offers/123' }],
+  geoEntities: [{ type: 'city', name: 'Бобриця' }, { type: 'region', name: 'Київська область' }]
+};
+const cityCard = { ...card, id: 43, geoEntities: [{ type: 'city', name: 'Київ' }, card.geoEntities[1]] };
+const rows = ['$', '$L13', null, { realties: { cards: [card, cityCard, { ...card, id: 44, urlRaw: 'javascript:alert(1)' }] } }];
+const html = `<script>self.__next_f.push(${JSON.stringify([1, 'previous text12:' + JSON.stringify(rows) + '\n'])})</script>
+<script id="schema-real-estate" type="application/ld+json">${JSON.stringify({ itemListElement: [{ item: { image: [photo] } }] })}</script>`;
+const lun = region => getLun({ request: new Request('https://example.pages.dev/api/lun?region=' + region) });
+const lunRequests = [];
+globalThis.fetch = async url => {
+  lunRequests.push(url);
+  return new Response(html);
+};
+assert.equal((await lun('unrecognized')).status, 400);
+assert.equal(lunRequests.length, 0);
+let listings = await (await lun('kyiv-oblast')).json();
+assert.deepEqual(lunRequests, ['https://lun.ua/sale/kyiv/region-houses']);
+assert.equal(listings.items.length, 1, 'Exclude Kyiv city and invalid listing URLs from the oblast');
+assert.equal(listings.items[0].url, card.urlRaw);
+assert.equal(listings.items[0].photo, photo);
+globalThis.fetch = async () => new Response('', { status: 403 });
+listings = await (await lun('odesa')).json();
+assert.equal(listings.region, 'odesa');
+assert(listings.snapshot && listings.items.length && listings.items.every(item => item.photo && item.url));
+console.log('LUN API: regional scope, photos, original links and regional fallback passed');

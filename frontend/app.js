@@ -15,11 +15,12 @@ async function ensurePlaces(rows) {
   }));
 }
 let items = [], selected = new Set(), sortKey = 'reg_date', sortDir = -1;
-let map, markersLayer, routeLayer, pinTarget = null;
+const lunStops = new Map();
+let map, markersLayer, routeLayer, syncLunRouteButton, pinTarget = null;
 let overrides = {};
 try { overrides = JSON.parse(localStorage.getItem('construction-pins-v1') || '{}'); } catch (_) {}
 const $ = id => document.getElementById(id);
-const coordLabel = it => it.coord_source === 'registry_address' ? 'За вулицею та номером будинку · перевірте перед виїздом' : it.coord_source === 'registry_street' ? 'Приблизно · знайдена вулиця' : it.coord_source === 'manual' ? 'Уточнено вручну' : it.coord_source === 'registry_parcel' ? 'Центр кадастрової ділянки · реєстр' : it.coord_source === 'settlement' ? 'Приблизно · центр населеного пункту' : hasCoordinates(it) ? 'Координати з реєстру' : 'Місце не визначено';
+const coordLabel = it => it.source === 'lun' ? 'Точка з оголошення ЛУН' : it.coord_source === 'registry_address' ? 'За вулицею та номером будинку · перевірте перед виїздом' : it.coord_source === 'registry_street' ? 'Приблизно · знайдена вулиця' : it.coord_source === 'manual' ? 'Уточнено вручну' : it.coord_source === 'registry_parcel' ? 'Центр кадастрової ділянки · реєстр' : it.coord_source === 'settlement' ? 'Приблизно · центр населеного пункту' : hasCoordinates(it) ? 'Координати з реєстру' : 'Місце не визначено';
 function hasCoordinates(it) { return Number.isFinite(it.lat) && Number.isFinite(it.lon) && Math.abs(it.lat) <= 90 && Math.abs(it.lon) <= 180; }
 function safeUrl(value) { try { const u = new URL(value); return u.protocol === 'https:' && u.hostname === 'e-construction.gov.ua' ? u.href : '#'; } catch (_) { return '#'; } }
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -98,12 +99,28 @@ function renderTabs() {
     button.addEventListener('click',()=>{$('filter-category').value=value;refresh();});tabs.appendChild(button);
   }
 }
+function selectedStopCount() {
+  return selected.size + lunStops.size;
+}
+function selectedRouteStops() {
+  return [...items.filter(item => selected.has(item.doc_number)), ...lunStops.values()];
+}
 function renderSelection() {
-  const tray=$('selected-stops');tray.replaceChildren();
-  for(const it of items.filter(it=>selected.has(it.doc_number))) {
-    const entry=document.createElement('span');entry.className='selected-stop';
-    const text=document.createElement('span');text.textContent=`${it.settlement||'Об’єкт'} · ${it.doc_number}`;entry.appendChild(text);
-    addButton(entry,'Прибрати',()=>toggleSelection(it.doc_number,false));tray.appendChild(entry);
+  const tray = $('selected-stops');
+  tray.replaceChildren();
+  for (const stop of selectedRouteStops()) {
+    const entry = document.createElement('span');
+    entry.className = 'selected-stop';
+    const text = document.createElement('span');
+    text.textContent = stop.source === 'lun'
+      ? ['ЛУН', stop.settlement, stop.address].filter(Boolean).join(' · ')
+      : `${stop.settlement || 'Об’єкт'} · ${stop.doc_number}`;
+    entry.appendChild(text);
+    addButton(entry, 'Прибрати', () => {
+      if (stop.source === 'lun') toggleLunStop(stop);
+      else toggleSelection(stop.doc_number, false);
+    });
+    tray.appendChild(entry);
   }
 }
 function filteredItems() {
@@ -135,12 +152,14 @@ function refresh(fit = true) {
 }
 function updateCounts() {
   const list = filteredItems(), located = list.filter(hasCoordinates).length;
-  $('result-count').textContent = `Знайдено: ${list.length} із ${items.length} · На карті: ${located} · Без точки: ${list.length - located} · Обрано: ${selected.size}`;
-  $('btn-route').disabled = selected.size < 2;
+  const totalStops = selectedStopCount();
+  $('result-count').textContent = `Знайдено: ${list.length} із ${items.length} · На карті: ${located} · Без точки: ${list.length - located} · У маршруті: ${totalStops}`;
+  $('btn-route').disabled = totalStops < 2;
   renderSelection();
+  syncLunRouteButton?.();
   $('btn-select-visible').disabled = !located;
-  $('selection-count').textContent = `Спільний маршрут: ${selected.size} / 10. Вибір зберігається при зміні вкладок і фільтрів.`;
-  $('map-count').textContent = `${located} об’єктів на карті. Помаранчеві точки — приблизні місця (населений пункт або вулиця), сині — точні / уточнені точки. Число на точці означає кількість об’єктів.`;
+  $('selection-count').textContent = `Спільний маршрут: ${totalStops} / 10. Вибір зберігається при зміні вкладок і фільтрів.`;
+  $('map-count').textContent = `${located} об’єктів на карті. Помаранчеві точки — приблизні місця (населений пункт або вулиця), сині — точні / уточнені точки, фіолетові — ЛУН. Число на точці означає кількість об’єктів.`;
 }
 function renderTable() {
   const list = filteredItems(), tbody = $('tbody'); tbody.replaceChildren();
@@ -169,16 +188,40 @@ function renderTable() {
 }
 function addButton(parent,label,callback) { const b=document.createElement('button'); b.type='button';b.className='small secondary';b.textContent=label;b.addEventListener('click',callback);parent.appendChild(b); }
 function toggleSelection(id,on) {
-  if (on && selected.size >= 10) { alert('Для одного маршруту можна обрати до 10 об’єктів.'); renderTable(); return; }
+  if (on && !selected.has(id) && selectedStopCount() >= 10) { alert('Для одного маршруту можна обрати до 10 об’єктів.'); renderTable(); return; }
   if(on)selected.add(id);else selected.delete(id);
   clearRoute();renderTable();updateCounts();updateMarkers(false);
+}
+function toggleLunStop(listing) {
+  if (lunStops.has(listing.id)) {
+    lunStops.delete(listing.id);
+  } else {
+    if (selectedStopCount() >= 10) {
+      alert('Для одного маршруту можна обрати до 10 об’єктів.');
+      return;
+    }
+    if (!hasCoordinates(listing)) return;
+    lunStops.set(listing.id, {
+      id: listing.id,
+      source: 'lun',
+      settlement: listing.locality,
+      address: listing.address,
+      lat: listing.lat,
+      lon: listing.lon
+    });
+  }
+  clearRoute();
+  updateCounts();
 }
 function initMap() {
   if(typeof L === 'undefined') { $('map').textContent='Карта недоступна. Перевірте інтернет і оновіть сторінку.';return; }
   map=L.map('map').setView([49,31],6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap · населені пункти: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0)',maxZoom:19}).addTo(map);
   markersLayer=L.layerGroup().addTo(map);routeLayer=L.layerGroup().addTo(map);
-  window.initLunLayer?.(map);
+  syncLunRouteButton = window.initLunLayer?.(map, {
+    has: id => lunStops.has(id),
+    toggle: toggleLunStop
+  }, regionsReady);
   map.on('click',event=>{ if(pinTarget){$('pin-lat').value=event.latlng.lat.toFixed(6);$('pin-lon').value=event.latlng.lng.toFixed(6);$('pin-message').textContent='Точку обрано. Натисніть «Зберегти точку».';} });
 }
 function updateMarkers(fit=true) {
@@ -243,7 +286,7 @@ function buildRoute(points) {
 }
 function clearRoute(){if(routeLayer)routeLayer.clearLayers();$('route-panel').textContent='Оберіть 2–10 об’єктів у таблиці або на карті. Для приблизних точок спочатку перевірте адресу.';}
 function onBuildRoute() {
-  const route=buildRoute(items.filter(it=>selected.has(it.doc_number)&&hasCoordinates(it)));
+  const route=buildRoute(selectedRouteStops().filter(hasCoordinates));
   if(route.length<2)return;
   clearRoute();let km=0;for(let i=1;i<route.length;i++)km+=haversine(route[i-1].lat,route[i-1].lon,route[i].lat,route[i].lon);
   if(routeLayer){L.polyline(route.map(it=>[it.lat,it.lon]),{color:'#10b981',weight:4,dashArray:'7 6'}).addTo(routeLayer);map.fitBounds(route.map(it=>[it.lat,it.lon]),{padding:[32,32],maxZoom:15});}
@@ -251,7 +294,7 @@ function onBuildRoute() {
   const navigationTarget=it=>['settlement','registry_street'].includes(it.coord_source)&&it.street_address ? 'Україна, '+(it.full_address || it.address) : `${it.lat},${it.lon}`;
   const params=new URLSearchParams({api:'1',travelmode:'driving',origin:navigationTarget(route[0]),destination:navigationTarget(route.at(-1))});
   if(route.length>2)params.set('waypoints',route.slice(1,-1).map(navigationTarget).join('|'));
-  $('route-panel').innerHTML=`<strong>Порядок об’їзду · ${km.toFixed(1)} км по прямій</strong><p>${approximate?'Увага: частина точок приблизна: центр населеного пункту або знайдена вулиця. Це не підтверджені позиції будівель. Уточніть точки для точного виїзду.':'Точки уточнено. Пунктир показує порядок відвідування, а не дороги.'}</p><ol>${route.map(it=>`<li>${escapeHtml(it.doc_number)} · ${escapeHtml(it.settlement || '')} · ${escapeHtml(it.address)} <small>(${escapeHtml(coordLabel(it))})</small></li>`).join('')}</ol><a href="https://www.google.com/maps/dir/?${escapeAttr(params)}" target="_blank" rel="noopener">Прокласти автомобільний маршрут у Google Maps ↗</a><p><small>Google Maps може обмежувати кількість проміжних зупинок у мобільному браузері.</small></p>`;
+  $('route-panel').innerHTML=`<strong>Порядок об’їзду · ${km.toFixed(1)} км по прямій</strong><p>${approximate?'Увага: частина точок приблизна: центр населеного пункту або знайдена вулиця. Це не підтверджені позиції будівель. Уточніть точки для точного виїзду.':'Пунктир показує порядок відвідування. Дороги для проїзду дивіться в Google Maps.'}</p><ol>${route.map(it=>`<li>${escapeHtml(it.source === 'lun' ? 'ЛУН' : it.doc_number)} · ${escapeHtml(it.settlement || '')} · ${escapeHtml(it.address)} <small>(${escapeHtml(coordLabel(it))})</small></li>`).join('')}</ol><a href="https://www.google.com/maps/dir/?${escapeAttr(params)}" target="_blank" rel="noopener">Прокласти автомобільний маршрут у Google Maps ↗</a><p><small>Google Maps може обмежувати кількість проміжних зупинок у мобільному браузері.</small></p>`;
 }
 document.addEventListener('leaflet-ready',()=>{if(!map){try{initMap();updateMarkers();}catch(error){console.warn(error);}}});
 function init(){
@@ -261,8 +304,8 @@ function init(){
   for(const id of ['filter-region','filter-town','filter-category','filter-document','filter-from','filter-to','filter-location'])$(id).addEventListener('change',()=>refresh());
   $('btn-reset-filters').addEventListener('click',resetFilters);
   $('btn-empty-reset').addEventListener('click',resetFilters);
-  $('btn-clear').addEventListener('click',()=>{selected.clear();refresh(false);});
-  $('btn-select-visible').addEventListener('click',()=>{for (const it of filteredItems().filter(hasCoordinates)) { if(selected.size>=10)break; selected.add(it.doc_number); }clearRoute();renderTable();updateCounts();updateMarkers(false);});
+  $('btn-clear').addEventListener('click',()=>{selected.clear();lunStops.clear();refresh(false);});
+  $('btn-select-visible').addEventListener('click',()=>{for (const it of filteredItems().filter(hasCoordinates)) { if(selectedStopCount()>=10)break; selected.add(it.doc_number); }clearRoute();renderTable();updateCounts();updateMarkers(false);});
   $('btn-route').addEventListener('click',onBuildRoute);
   $('pin-editor').addEventListener('submit',savePin);
   $('pin-cancel').addEventListener('click',()=>{pinTarget=null;$('pin-editor').hidden=true;});

@@ -52,5 +52,17 @@ const call=code=>vm.runInContext('testEval('+JSON.stringify(code)+')',context);
  await byId('btn-force-refresh').handlers.click();await new Promise(resolve=>setTimeout(resolve,30));assert.equal(byId('btn-force-refresh').disabled,false);assert(byId('data-refresh-message').textContent.includes('Дані оновлено'));
  byId('snapshot-mode').value='changed';await late.ConstructionApp.reload({automatic:true});assert.equal(byId('snapshot-mode').value,'changed','Automatic publication refresh preserves comparison mode');
  const oldFetch=late.fetch;late.fetch=async()=>{throw Error('offline')};late.console={...console,warn(){}};await byId('btn-force-refresh').handlers.click();assert.equal(byId('btn-force-refresh').disabled,false);assert(byId('data-refresh-message').textContent.includes('Попередні дані'));late.fetch=oldFetch;
- console.log('Settlement matching, filters, cross-tab route selection and manual pin: passed');
+
+ await context.ConstructionApp.setData(fixtures, 'Mixed route');
+ call(`selected.clear();toggleSelection('one',true);
+   toggleLunStop({id:'42',locality:'Конопниця',address:'Садова',lat:49.8,lon:23.9});onBuildRoute()`);
+ assert.equal(byId('selected-stops').children.length,2);
+ assert(byId('route-panel').innerHTML.includes('Точка з оголошення ЛУН'));
+ assert(byId('route-panel').innerHTML.includes('destination=49.8%2C23.9'));
+ await context.ConstructionApp.setData(fixtures.slice(2), 'Refreshed register');
+ assert.equal(byId('selected-stops').children.length,1,'A register refresh preserves selected LUN stops');
+ assert(byId('selected-stops').children[0].children[0].textContent.includes('Конопниця'));
+ byId('selected-stops').children[0].children[1].handlers.click();
+ assert.equal(byId('selected-stops').children.length,0);
+ console.log('Settlement matching, filters, mixed register and LUN routes, and manual pin: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});
