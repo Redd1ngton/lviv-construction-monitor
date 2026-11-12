@@ -1,5 +1,5 @@
 async function loadLunPage(region, page, signal) {
-  const params = new URLSearchParams({ region, page: String(page) });
+  const params = new URLSearchParams({ region, page: String(page), v: '4' });
   let response;
   try {
     response = await fetch('/api/lun?' + params, {
@@ -27,7 +27,7 @@ async function loadLunPage(region, page, signal) {
 
 async function readSavedLunCatalog(region, signal) {
   try {
-    const response = await fetch('./lun-data/' + encodeURIComponent(region) + '.json.gz', { signal });
+    const response = await fetch('./lun-data/' + encodeURIComponent(region) + '.json.gz?v=2', { signal });
     if (!response.ok) return null;
     const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
     const data = await new Response(stream).json();
@@ -118,6 +118,11 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   const panel = byId('lun-panel');
   const toggle = byId('lun-toggle');
   const regionSelect = byId('lun-region');
+  const typeOptions = byId('lun-type-options');
+  const allTypes = byId('lun-type-all');
+  const typeInputs = [...typeOptions.querySelectorAll('input[name="lun-type"]')];
+  const typeLabels = new Map(typeInputs.map(input => [input.value, input.parentElement.textContent.trim()]));
+  const typeOf = listing => typeLabels.has(listing.objectType) ? listing.objectType : 'unknown';
   const status = byId('lun-status');
   const preview = byId('lun-preview');
   const chooser = byId('lun-listing');
@@ -144,6 +149,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   let renderTimer;
   let activeGroup = [];
   let activeListing;
+  let selectedTypes;
 
   function syncRouteButton() {
     const selected = Boolean(activeListing && route.has(activeListing.id));
@@ -154,7 +160,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   function showListing(listing) {
     activeListing = listing;
     byId('lun-address').textContent = [listing.address, listing.locality]
-      .filter((value, index, values) => value && values.indexOf(value) === index).join(', ') || 'Будинок на продаж';
+      .filter((value, index, values) => value && values.indexOf(value) === index).join(', ') || 'Оголошення ЛУН';
+    byId('lun-listing-type').textContent = typeLabels.get(typeOf(listing));
     byId('lun-price').textContent = listing.price && listing.currency
       ? new Intl.NumberFormat('uk-UA', { style: 'currency', currency: listing.currency, maximumFractionDigits: 0 }).format(listing.price)
       : 'Ціну не вказано';
@@ -162,7 +169,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     photo.hidden = !listing.photo;
     photoStatus.hidden = Boolean(listing.photo);
     if (listing.photo) {
-      photo.alt = 'Фото будинку' + (listing.locality ? ' · ' + listing.locality : '');
+      photo.alt = 'Фото об’єкта' + (listing.locality ? ' · ' + listing.locality : '');
       photo.src = listing.photo;
     } else {
       photo.removeAttribute('src');
@@ -247,7 +254,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
       progress.removeAttribute('value');
     }
 
-    const count = `На карті ${visibleItems.length} із ${displayed.items.size} оголошень`;
+    const count = selectedTypes.size ? `На карті ${visibleItems.length} із ${displayed.items.size} оголошень`
+      : 'Оберіть хоча б один тип об’єкта';
     const date = catalog.saved?.fetchedAt && new Date(catalog.saved.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' });
     const savedNotice = date ? ' Збережені дані від ' + date + '.' : '';
     retryButton.textContent = catalog.nextPage === 1 || catalog.complete ? 'Оновити з ЛУН' : 'Продовжити завантаження';
@@ -280,7 +288,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     if (!toggle.checked || !catalog) return;
     const meters = radiusMeters();
     const displayed = catalog.saved ?? catalog;
-    visibleItems = listingsWithinRadius(displayed.items.values(), map, center, meters);
+    visibleItems = listingsWithinRadius(displayed.items.values(), map, center, meters)
+      .filter(item => selectedTypes.has(typeOf(item)));
     if (activeListing && !visibleItems.some(item => item.id === activeListing.id)) {
       activeGroup = [];
       activeListing = undefined;
@@ -289,6 +298,17 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     drawMarkers();
     updateStatus();
     if (fit) fitPoints(visibleItems.map(({ lat, lon }) => [lat, lon]));
+  }
+
+  function applyTypes() {
+    selectedTypes = new Set(typeInputs.filter(input => input.checked).map(input => input.value));
+    allTypes.checked = selectedTypes.size === typeInputs.length;
+    allTypes.indeterminate = selectedTypes.size > 0 && !allTypes.checked;
+    byId('lun-type-summary').textContent = allTypes.checked ? 'Усі' : selectedTypes.size + ' із ' + typeInputs.length;
+    activeGroup = [];
+    activeListing = undefined;
+    preview.hidden = true;
+    showListings();
   }
 
   function updateCenterStatus() {
@@ -452,6 +472,13 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   });
   toggle.addEventListener('change', updateLayer);
   regionSelect.addEventListener('change', updateLayer);
+  typeOptions.addEventListener('change', event => {
+    if (event.target === allTypes) {
+      for (const input of typeInputs) input.checked = allTypes.checked;
+    }
+    applyTypes();
+  });
+  applyTypes();
   document.addEventListener('collection-change', () => {
     if (!regionSelect.value && toggle.checked) updateLayer();
   });

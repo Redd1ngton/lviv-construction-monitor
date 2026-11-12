@@ -217,6 +217,12 @@
       border: 1px solid var(--border); border-radius: 6px;
     }
     .lun-panel-body p { margin: 0; }
+    .lun-type-filter { border: 1px solid var(--border); border-radius: 6px; }
+    .lun-type-filter summary { padding: .35rem .5rem; }
+    .lun-type-filter summary span { float: right; color: var(--muted); }
+    .lun-type-options { display: grid; padding: 0 .5rem .35rem; }
+    .lun-type-options label { display: flex; align-items: center; gap: .3rem; min-height: 24px; }
+    #lun-listing-type { color: var(--muted); }
     .lun-radius-controls { display: grid; grid-template-columns: 6rem 1fr; gap: .45rem; align-items: end; }
     .lun-radius-controls label { display: grid; gap: .2rem; }
     .lun-radius-controls button, #lun-retry { padding: .38rem .55rem; font: inherit; }
@@ -377,6 +383,20 @@
             <select id="lun-region" disabled>
               <option value="">За вибором у моніторі</option>
             </select>
+            <details class="lun-type-filter">
+              <summary>Типи об’єктів <span id="lun-type-summary">Усі</span></summary>
+              <div class="lun-type-options" id="lun-type-options">
+                <label><input type="checkbox" id="lun-type-all" checked> Усі типи</label>
+                <label><input type="checkbox" name="lun-type" value="house" checked> Будинок</label>
+                <label><input type="checkbox" name="lun-type" value="apartment" checked> Квартира</label>
+                <label><input type="checkbox" name="lun-type" value="townhouse" checked> Таунхаус</label>
+                <label><input type="checkbox" name="lun-type" value="duplex" checked> Дуплекс</label>
+                <label><input type="checkbox" name="lun-type" value="part_of_house" checked> Частина будинку</label>
+                <label><input type="checkbox" name="lun-type" value="dacha" checked> Дача</label>
+                <label><input type="checkbox" name="lun-type" value="modular" checked> Модульний будинок</label>
+                <label><input type="checkbox" name="lun-type" value="unknown" checked> Тип не вказано</label>
+              </div>
+            </details>
             <div class="lun-radius-controls">
               <label>Радіус, км <input type="number" id="lun-radius" min="1" step="any" placeholder="Усі" disabled></label>
               <button id="lun-pick-center" type="button" class="secondary" disabled>Вказати центр на карті</button>
@@ -392,6 +412,7 @@
               <img id="lun-photo" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">
               <small id="lun-photo-status" hidden>Фото недоступне</small>
               <strong id="lun-address"></strong>
+              <small id="lun-listing-type"></small>
               <p id="lun-price"></p>
               <a id="lun-link" target="_blank" rel="noopener noreferrer">Відкрити оголошення ↗</a>
               <button id="lun-route" type="button" class="secondary">Додати до маршруту</button>
@@ -409,7 +430,7 @@
   <script defer src="geo.js?v=20261110-7"></script>
   <script defer src="datasets.js?v=20261110-7"></script>
   <script defer src="collection.js?v=20261110-7"></script>
-  <script defer src="lun.js?v=8"></script>
+  <script defer src="lun.js?v=9"></script>
   <script defer src="app.js?v=20261112-5"></script>
   <script defer src="snapshots.js?v=20261110-7"></script>
 

@@ -5,6 +5,24 @@ import snapshots from './lun-snapshot.json' with { type: 'json' };
 const origin = 'https://lun.ua';
 const pictureHost = 'market-images.lunstatic.net';
 const pageSize = 24;
+const houseTypes = new Set(['house', 'part_of_house', 'townhouse', 'duplex', 'dacha', 'modular']);
+const roomCount = /\d+\s*(?:[-–]?х\s*)?[-–]?\s*к(?:імн\p{L}*|омн\p{L}*)?\.?/u;
+const adjective = /(?:затишн|простор|світл|сучасн|стильн|дворівнев|двокімнатн|трикімнатн|однокімнатн)\p{L}+/u;
+const apartmentTitle = new RegExp(
+  '^(?:(?:' + roomCount.source + '|' + adjective.source + ')\\s*){0,3}квартир[ауиы](?!\\p{L})', 'iu'
+);
+
+function declaresApartment(value) {
+  if (typeof value !== 'string') return false;
+  const title = value.slice(0, 160).replace(/^[^\p{L}\d]*/u, '')
+    .replace(/^(?:продаж[а]?|продам|продається|прода[её]тся|продаю)\s+/iu, '');
+  return apartmentTitle.test(title);
+}
+
+function objectType(card) {
+  if (card.sectionId === 1 || declaresApartment(card.header) || declaresApartment(card.text)) return 'apartment';
+  return houseTypes.has(card.houseTypeName) ? card.houseTypeName : 'unknown';
+}
 
 function httpsUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) return null;
@@ -80,6 +98,7 @@ export function parseLunPage(html, region) {
       lon,
       locality: locality.slice(0, 100),
       address: String(card.header ?? '').slice(0, 160),
+      objectType: objectType(card),
       price: Number.isFinite(card.price) && card.price > 0 ? card.price : null,
       currency: /^[A-Z]{3}$/.test(currency) ? currency : null,
       photo: photo ?? null,
@@ -106,7 +125,7 @@ export async function onRequest({ request, ctx }) {
   const source = new URL(regionPages[region].path, origin);
   if (page > 1) source.searchParams.set('page', String(page));
   const key = new URL('/api/lun', request.url);
-  key.search = new URLSearchParams({ region, page: String(page), version: '3' });
+  key.search = new URLSearchParams({ region, page: String(page), version: '4' });
   const cache = globalThis.caches?.default;
   const cached = await cache?.match(key.href).catch(() => undefined);
   if (cached) return cached;

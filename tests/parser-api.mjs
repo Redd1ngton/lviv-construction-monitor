@@ -37,7 +37,7 @@ globalThis.fetch=async()=>Response.json({centroid:{coordinates:[0,0]}});
 problem=await (await get('?action=parcel&number=4625384800%3A05%3A002%3A0016')).json();assert.equal(problem.point,null);
 console.log('Direct registry API: no secrets, bounded scope, host validation and upstream errors passed');
 
-const { onRequest: getLun } = await import('../functions/api/lun.js');
+const { onRequest: getLun, parseLunPage } = await import('../functions/api/lun.js');
 const photo = 'https://market-images.lunstatic.net/lun-ua/960/1280/images/offers/123.jpg';
 const card = {
   id: 42, location: [30.25, 50.25], header: 'Садова',
@@ -55,6 +55,18 @@ const lunHtml = (page, cards) => {
 <script id="schema-real-estate" type="application/ld+json">${JSON.stringify({ itemListElement: [{ item: { image: [photo] } }] })}</script>`;
 };
 const html = lunHtml(1, [card, cityCard, { ...card, id: 44, urlRaw: 'javascript:alert(1)' }]);
+const typedCards = [
+  { ...card, id: 100, houseTypeName: 'townhouse' },
+  { ...card, id: 101, sectionId: 1 },
+  { ...card, id: 102, houseTypeName: 'house', header: 'Продаж 3-х кімнатної квартири' },
+  { ...card, id: 103, houseTypeName: 'house', text: 'Продається квартира на першому поверсі.' },
+  { ...card, id: 104, houseTypeName: 'house', text: 'Продається будинок. Можливий обмін на квартиру.' },
+  { ...card, id: 105, houseTypeName: 'special_project' }
+];
+assert.deepEqual(
+  parseLunPage(lunHtml(1, typedCards), 'kyiv-oblast').items.map(item => item.objectType),
+  ['townhouse', 'apartment', 'apartment', 'apartment', 'house', 'unknown']
+);
 const lun = (region, page) => getLun({
   request: new Request('https://example.pages.dev/api/lun?' + new URLSearchParams({ region, ...(page && { page }) }))
 });
