@@ -213,6 +213,95 @@ function toggleLunStop(listing) {
   clearRoute();
   updateCounts();
 }
+function initPaneSplitter() {
+  const splitter = $('pane-splitter');
+  const layout = splitter?.parentElement;
+  if (!layout) return;
+
+  const preference = 'construction-table-share';
+  const styles = getComputedStyle(layout);
+  const defaultShare = Number(styles.getPropertyValue('--table-share'));
+  const minTable = parseFloat(styles.getPropertyValue('--table-min'));
+  const minMap = parseFloat(styles.getPropertyValue('--map-min'));
+  let share = defaultShare;
+  let pointer = null;
+  let grabOffset = 0;
+
+  try {
+    const saved = Number(localStorage.getItem(preference));
+    if (saved > 0 && saved < 1) share = saved;
+  } catch (_) {}
+  layout.style.setProperty('--table-share', share);
+
+  function range() {
+    const width = layout.clientWidth - splitter.offsetWidth;
+    return { width, min: minTable / width, max: 1 - minMap / width };
+  }
+  const clamp = (value, { min, max }) => Math.min(max, Math.max(min, value));
+
+  function updateValue() {
+    if (!splitter.offsetWidth) return;
+    const bounds = range();
+    splitter.setAttribute('aria-valuemin', Math.round(bounds.min * 100));
+    splitter.setAttribute('aria-valuemax', Math.round(bounds.max * 100));
+    splitter.setAttribute('aria-valuenow', Math.round(clamp(share, bounds) * 100));
+  }
+
+  function setShare(value, bounds) {
+    share = clamp(value, bounds);
+    layout.style.setProperty('--table-share', share);
+    updateValue();
+  }
+  function saveShare() {
+    try { localStorage.setItem(preference, String(share)); } catch (_) {}
+  }
+
+  splitter.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || pointer !== null) return;
+    splitter.setPointerCapture(event.pointerId);
+    pointer = event.pointerId;
+    grabOffset = event.clientX - splitter.getBoundingClientRect().left;
+    layout.classList.add('resizing-panes');
+    splitter.focus({ preventScroll: true });
+    event.preventDefault();
+  });
+  splitter.addEventListener('pointermove', event => {
+    if (event.pointerId !== pointer || !splitter.offsetWidth) return;
+    const bounds = range();
+    const x = event.clientX - layout.getBoundingClientRect().left - grabOffset;
+    setShare(x / bounds.width, bounds);
+  });
+  function finishDrag(event) {
+    if (event.pointerId !== pointer) return;
+    pointer = null;
+    layout.classList.remove('resizing-panes');
+    saveShare();
+  }
+  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) splitter.addEventListener(event, finishDrag);
+
+  splitter.addEventListener('dblclick', () => {
+    setShare(defaultShare, range());
+    saveShare();
+  });
+  splitter.addEventListener('keydown', event => {
+    const bounds = range();
+    const current = clamp(share, bounds);
+    let next;
+    switch (event.key) {
+      case 'ArrowLeft': next = current - .03; break;
+      case 'ArrowRight': next = current + .03; break;
+      case 'Home': next = bounds.min; break;
+      case 'End': next = bounds.max; break;
+      case 'Enter': next = defaultShare; break;
+      default: return;
+    }
+    event.preventDefault();
+    setShare(next, bounds);
+    saveShare();
+  });
+  window.addEventListener('resize', updateValue);
+  updateValue();
+}
 function initMap() {
   if(typeof L === 'undefined') { $('map').textContent='Карта недоступна. Перевірте інтернет і оновіть сторінку.';return; }
   map=L.map('map').setView([49,31],6);
@@ -223,6 +312,9 @@ function initMap() {
     toggle: toggleLunStop
   }, regionsReady);
   map.on('click',event=>{ if(pinTarget && !event.lunCenterPicked){$('pin-lat').value=event.latlng.lat.toFixed(6);$('pin-lon').value=event.latlng.lng.toFixed(6);$('pin-message').textContent='Точку обрано. Натисніть «Зберегти точку».';} });
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => map.invalidateSize({ debounceMoveend: true })).observe($('map'));
+  }
 }
 function updateMarkers(fit=true) {
   if(!markersLayer)return;
@@ -298,6 +390,7 @@ function onBuildRoute() {
 }
 document.addEventListener('leaflet-ready',()=>{if(!map){try{initMap();updateMarkers();}catch(error){console.warn(error);}}});
 function init(){
+  initPaneSplitter();
   $('btn-force-refresh').addEventListener('click',()=>{window.ParserStatus?.refresh(true);return loadData(true);});
   document.querySelectorAll('th[data-key]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.key;if(key==='_select')return;if(sortKey===key)sortDir*=-1;else{sortKey=key;sortDir=key==='reg_date'?-1:1;}renderTable();}));
   $('search').addEventListener('input',()=>refresh());

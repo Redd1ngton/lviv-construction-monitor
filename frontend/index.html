@@ -62,15 +62,42 @@
     button:hover { filter: brightness(1.1); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     main {
+      --table-share: .524;
+      --table-min: 256px;
+      --map-min: 336px;
+      --splitter-width: 24px;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0;
-      height: calc(100vh - 70px);
+      grid-template-columns:
+        clamp(var(--table-min), calc((100% - var(--splitter-width)) * var(--table-share)), calc(100% - var(--splitter-width) - var(--map-min)))
+        var(--splitter-width) minmax(0, 1fr);
+      align-items: start;
+      flex: 1;
+      min-height: 500px;
     }
-    @media (max-width: 900px) {
-      main { grid-template-columns: 1fr; height: auto; }
-      #map { height: 360px !important; }
+    .pane-splitter {
+      align-self: stretch;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      border-inline: 1px solid var(--border);
+      color: var(--muted);
+      cursor: col-resize;
+      touch-action: pan-y;
+      user-select: none;
     }
+    .pane-splitter span {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 40px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      pointer-events: none;
+    }
+    .pane-splitter:hover, .pane-splitter:focus-visible, .resizing-panes .pane-splitter { color: var(--text); background: #23334a; }
+    .pane-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .resizing-panes, .resizing-panes * { cursor: col-resize !important; user-select: none; }
     .table-wrap {
       overflow: auto;
       padding: 0.5rem;
@@ -118,7 +145,6 @@
       font-size: 0.75rem;
     }
     body { min-height: 100dvh; display: flex; flex-direction: column; }
-    main { flex: 1; height: auto; min-height: 500px; }
     .parser-panel { padding: .85rem 1.5rem; background: var(--card); border-bottom: 1px solid var(--border); font-size: .85rem; }
     .parser-top { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
     .parser-top button { margin-left: auto; font-size: .8rem; }
@@ -172,7 +198,6 @@
     #btn-empty-reset { margin:.5rem; }
     #parser-progress[data-kind="failure"] { accent-color:#fb7185; }
     #result-count { flex-basis:100%; font-size:.85rem; }
-    main { grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); align-items:start; }
     .table-wrap { max-height:75vh; }
     table { min-width:1050px; }
     .map-frame { position: relative; isolation: isolate; }
@@ -221,7 +246,14 @@
     .map-dot.approx { background:#b45309; }.map-dot.exact { background:#2563eb; }.map-dot.selected { background:#047857; border:3px solid #6ee7b7; }
     .object-popup { color:#152032; }.object-popup p { margin:.4rem 0; }.popup-item { padding:.4rem 0; border-top:1px solid #d1d5db; }
     .route-panel { max-height:300px; overflow:auto; }
-    @media(max-width:900px) { main { grid-template-columns:minmax(0,1fr); }.map-column { position:static; }.table-wrap { max-height:55vh; }.filters label { flex-basis:42%; } }
+    @media (max-width: 900px) {
+      main { grid-template-columns: minmax(0, 1fr); }
+      .pane-splitter { display: none; }
+      #map { height: 360px; }
+      .map-column { position: static; }
+      .table-wrap { max-height: 55vh; }
+      .filters label { flex-basis: 42%; }
+    }
     .empty { color: var(--muted); padding: 2rem; text-align: center; }
   </style>
 </head>
@@ -303,7 +335,7 @@
     <div id="result-count" role="status" aria-live="polite"></div>
   </section>
   <main>
-    <div class="table-wrap">
+    <div id="table-pane" class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -323,6 +355,10 @@
       <div class="empty" id="empty" style="display:none">Немає записів для цього пошуку або перший автоматичний збір ще не завершився.</div>
       <button type="button" id="btn-empty-reset" class="secondary" hidden>Скинути всі фільтри</button>
     </div>
+    <div id="pane-splitter" class="pane-splitter" role="separator" tabindex="0" aria-orientation="vertical"
+      aria-controls="table-pane" aria-label="Ширина таблиці" aria-valuemin="0" aria-valuemax="100" aria-valuenow="52"
+      aria-description="Перетягніть розділювач або використайте стрілки вліво й вправо. Enter відновлює початковий розмір."
+      title="Перетягніть, щоб змінити ширину таблиці й карти. Подвійний клік відновлює розмір."><span aria-hidden="true">↔</span></div>
     <div class="map-column">
       <div class="map-info"><p id="map-count"></p><small id="map-note">Позиції з реєстру мають пріоритет. Приблизні точки позначено окремо.</small></div>
       <form id="pin-editor" hidden>
@@ -374,7 +410,7 @@
   <script defer src="datasets.js?v=20261110-7"></script>
   <script defer src="collection.js?v=20261110-7"></script>
   <script defer src="lun.js?v=8"></script>
-  <script defer src="app.js?v=20261112-4"></script>
+  <script defer src="app.js?v=20261112-5"></script>
   <script defer src="snapshots.js?v=20261110-7"></script>
 
 </body>
