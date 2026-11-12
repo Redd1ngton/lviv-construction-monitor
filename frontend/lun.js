@@ -124,15 +124,19 @@ window.initLunLayer = function initLunLayer(map, route, regionNamesReady) {
 
       renderListings(data.items);
       layer.addTo(map);
-      if (data.items.length) {
-        map.fitBounds(data.items.map(({ lat, lon }) => [lat, lon]), { padding: [28, 28], maxZoom: 13 });
-      }
       const snapshotDate = data.snapshot && data.fetchedAt
         ? ' · збережені дані від ' + new Date(data.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' })
         : '';
       status.textContent = data.items.length
         ? `${data.items.length} оголошень із першої сторінки${snapshotDate}. Наведіть або натисніть точку.`
         : 'Для цієї області немає оголошень із координатами.';
+      if (data.items.length) {
+        const size = map.getSize();
+        const useSidePadding = size.x - panel.offsetWidth > 240;
+        const paddingTopLeft = [24, useSidePadding ? 24 : Math.min(panel.offsetHeight + 24, size.y * 0.62)];
+        const paddingBottomRight = [useSidePadding ? panel.offsetWidth + 24 : 24, 24];
+        map.fitBounds(data.items.map(({ lat, lon }) => [lat, lon]), { paddingTopLeft, paddingBottomRight, maxZoom: 13 });
+      }
     } catch {
       if (pending !== controller) return;
       activeRegion = '';

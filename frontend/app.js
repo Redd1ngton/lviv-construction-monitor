@@ -247,7 +247,7 @@ function updateMarkers(fit=true) {
     if(group.length>30){const note=document.createElement('p');note.textContent='Решта об’єктів доступні у таблиці. Скористайтеся фільтром населеного пункту.';popup.appendChild(note);}
     marker.bindPopup(popup,{maxWidth:360,maxHeight:350});markersLayer.addLayer(marker);bounds.push([first.lat,first.lon]);
   }
-  if(fit && bounds.length)map.fitBounds(bounds,{padding:[32,32],maxZoom:13});
+  if(fit && bounds.length && !$('lun-toggle')?.checked)map.fitBounds(bounds,{padding:[32,32],maxZoom:13});
 }
 function showOnMap(it) {
   if(!map)return;
