@@ -1,3 +1,5 @@
+import snapshot from './lun-snapshot.json';
+
 const source = 'https://lun.ua/sale/lviv/houses?geoDistance=10012684%3A45000';
 
 export function parseListings(html) {
@@ -29,17 +31,16 @@ export async function onRequest({ request, ctx }) {
   if (request.method !== 'GET') return new Response(null, { status: 405, headers: { Allow: 'GET' } });
   const url = new URL('/api/lun', request.url);
   const cache = globalThis.caches?.default;
-  const cached = await cache?.match(url.href);
-  if (cached) return cached;
-
   try {
+    const cached = await cache?.match(url.href);
+    if (cached) return cached;
     const upstream = await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(12000) });
     if (!upstream.ok) throw new Error('Listing source unavailable');
     const data = parseListings(await upstream.text());
-    const response = Response.json(data, { headers: { 'Cache-Control': 'public, max-age=900' } });
+    const response = Response.json({ ...data, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=900' } });
     if (cache && ctx) ctx.waitUntil(cache.put(url.href, response.clone()).catch(() => {}));
     return response;
   } catch {
-    return Response.json({ message: 'ЛУН тимчасово недоступний. Спробуйте пізніше.' }, { status: 502 });
+    return Response.json({ ...snapshot, snapshot: true }, { headers: { 'Cache-Control': 'public, max-age=120' } });
   }
 }

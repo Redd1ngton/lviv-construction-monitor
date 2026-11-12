@@ -44,7 +44,10 @@ window.initLunLayer = function initLunLayer(map) {
       loaded = true;
       layer.addTo(map);
       if (data.items.length) map.fitBounds(data.items.map(({ lat, lon }) => [lat, lon]), { padding: [24, 24], maxZoom: 13 });
-      status.textContent = `ЛУН · ${data.items.length} точок із першої сторінки добірки`;
+      const snapshotDate = data.snapshot && data.fetchedAt
+        ? ' · збережені дані від ' + new Date(data.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' })
+        : '';
+      status.textContent = `ЛУН · ${data.items.length} точок із першої сторінки добірки${snapshotDate}`;
     } catch {
       layer.clearLayers();
       toggle.checked = false;
