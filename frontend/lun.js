@@ -3,9 +3,9 @@ async function loadLunPage(region, page, signal) {
   const response = await fetch('/api/lun?' + params, {
     signal: AbortSignal.any([signal, AbortSignal.timeout(23000)])
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || 'Сторінка ЛУН недоступна.');
-  if (data.region !== region || data.page !== page || !Array.isArray(data.items)) {
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.message || `Сервер повернув HTTP ${response.status}.`);
+  if (data?.region !== region || data.page !== page || !Array.isArray(data.items)) {
     throw new Error('ЛУН повернув іншу сторінку.');
   }
   return data;
@@ -31,11 +31,10 @@ async function collectLunCatalog(catalog, signal, onPage) {
     signal.throwIfAborted();
     const page = catalog.nextPage;
     const data = await loadLunPage(catalog.region, page, signal);
+    signal.throwIfAborted();
     if (data.snapshot) {
-      if (!catalog.pagesLoaded) {
-        catalog.items = new Map(data.items.map(item => [item.id, item]));
-        catalog.pagesLoaded = 1;
-        catalog.savedAt = data.fetchedAt;
+      if (!catalog.pagesLoaded && !catalog.saved) {
+        catalog.saved = { ...data, items: new Map(data.items.map(item => [item.id, item])), pagesLoaded: 1 };
       }
       catalog.error = data.message || 'ЛУН тимчасово недоступний.';
       onPage();
@@ -45,19 +44,21 @@ async function collectLunCatalog(catalog, signal, onPage) {
     if (!Number.isSafeInteger(data.totalPages) || data.totalPages < 1) {
       throw new Error('ЛУН не повідомив кількість сторінок.');
     }
-    if (page === 1) {
-      catalog.items.clear();
-      catalog.savedAt = null;
-    }
+    if (page === 1) catalog.fetchedAt = data.fetchedAt;
     for (const item of data.items) catalog.items.set(item.id, item);
     catalog.pagesLoaded = page;
     catalog.totalPages = data.totalPages;
     catalog.nextPage = page + 1;
     catalog.complete = page >= data.totalPages;
+    if (catalog.complete || catalog.saved?.totalPages === null) catalog.saved = null;
     onPage();
 
     if (!catalog.complete) await new Promise(resolve => setTimeout(resolve, 900));
   }
+}
+
+function newLunCatalog(region, saved = null) {
+  return { region, saved, items: new Map(), pagesLoaded: 0, totalPages: null, nextPage: 1, complete: false };
 }
 
 function listingsWithinRadius(items, map, center, meters) {
@@ -84,6 +85,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   const progress = byId('lun-progress');
   const layer = L.layerGroup();
   const radiusLayer = L.layerGroup();
+  const catalogs = new Map();
 
   let regions = {};
   let catalog;
@@ -185,28 +187,31 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
 
   function updateStatus() {
     progress.hidden = !pending || !catalog;
-    retryButton.hidden = !toggle.checked || !catalog?.error || Boolean(pending);
+    retryButton.hidden = !toggle.checked || Boolean(pending) || !(catalog?.error || catalog?.complete);
     if (!toggle.checked || !catalog) return;
 
-    const pages = catalog.totalPages === null
-      ? `Сторінок ${catalog.pagesLoaded}`
-      : `Сторінки ${catalog.pagesLoaded} із ${catalog.totalPages}`;
-    if (pending && catalog.totalPages !== null && !catalog.savedAt) {
+    const displayed = catalog.saved ?? catalog;
+    const pages = displayed.totalPages === null
+      ? `Сторінок ${displayed.pagesLoaded}`
+      : `Сторінки ${displayed.pagesLoaded} із ${displayed.totalPages}`;
+    if (pending && catalog.totalPages !== null) {
       progress.max = catalog.totalPages;
       progress.value = catalog.pagesLoaded;
     } else {
       progress.removeAttribute('value');
     }
 
-    const count = `На карті ${visibleItems.length} із ${catalog.items.size} оголошень`;
-    const date = catalog.savedAt && new Date(catalog.savedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' });
+    const count = `На карті ${visibleItems.length} із ${displayed.items.size} оголошень`;
+    const date = catalog.saved?.fetchedAt && new Date(catalog.saved.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' });
     const savedNotice = date ? ' Збережені дані від ' + date + '.' : '';
-    retryButton.textContent = date ? 'Оновити з ЛУН' : 'Продовжити завантаження';
+    retryButton.textContent = catalog.nextPage === 1 || catalog.complete ? 'Оновити з ЛУН' : 'Продовжити завантаження';
     if (catalog.error) {
       status.textContent = `${count} · ${pages}.${savedNotice} ${catalog.error}`;
     } else if (pending) {
-      const activity = date ? 'Перевіряємо свіжі дані ЛУН' : 'Завантажуємо сторінки ЛУН';
-      status.textContent = `${activity} · ${pages}. ${count}.${savedNotice}`;
+      const activity = catalog.saved ? 'Оновлюємо з ЛУН' : 'Завантажуємо сторінки ЛУН';
+      const livePages = catalog.saved && catalog.totalPages !== null
+        ? ` · сторінки ${catalog.pagesLoaded} із ${catalog.totalPages}` : '';
+      status.textContent = `${activity}${livePages}. ${count} · ${pages}.${savedNotice}`;
     } else {
       status.textContent = `${count} · ${pages}.${savedNotice}`;
     }
@@ -226,7 +231,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     renderTimer = undefined;
     if (!toggle.checked || !catalog) return;
     const meters = radiusMeters();
-    visibleItems = listingsWithinRadius(catalog.items.values(), map, center, meters);
+    const displayed = catalog.saved ?? catalog;
+    visibleItems = listingsWithinRadius(displayed.items.values(), map, center, meters);
     if (activeListing && !visibleItems.some(item => item.id === activeListing.id)) {
       activeGroup = [];
       activeListing = undefined;
@@ -247,7 +253,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     radiusLayer.clearLayers();
     const meters = radiusMeters();
     updateCenterStatus();
-    showListings();
+    showListings(fit && !meters);
     if (meters && toggle.checked && catalog) {
       const circle = L.circle(center, {
         radius: meters, color: '#7c3aed', weight: 2, fillOpacity: 0.08, interactive: false
@@ -279,34 +285,45 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     current.error = '';
     updateStatus();
     try {
-      if (!current.pagesLoaded) {
+      if (!current.pagesLoaded && !current.saved) {
         const saved = await readSavedLunCatalog(current.region, controller.signal);
         controller.signal.throwIfAborted();
         if (saved) {
-          current.items = new Map(saved.items.map(item => [item.id, item]));
-          current.pagesLoaded = saved.pagesLoaded;
-          current.totalPages = saved.totalPages;
-          current.savedAt = saved.fetchedAt;
+          current.saved = { ...saved, items: new Map(saved.items.map(item => [item.id, item])) };
           showListings(!radiusMeters());
         }
       }
       await collectLunCatalog(current, controller.signal, () => {
         if (pending !== controller) return;
-        if (current.pagesLoaded === 1 || current.complete || current.savedAt) {
-          showListings(current.pagesLoaded === 1 && !radiusMeters());
-        } else if (!renderTimer) {
+        const firstPage = current.saved?.totalPages === null || (!current.saved && current.pagesLoaded === 1);
+        if (firstPage || current.complete) {
+          showListings(firstPage && !radiusMeters());
+        } else if (!current.saved && !renderTimer) {
           renderTimer = setTimeout(showListings, 1300);
         }
         updateStatus();
       });
     } catch (error) {
-      if (!controller.signal.aborted) current.error = error.message || 'ЛУН тимчасово недоступний.';
+      if (!controller.signal.aborted) {
+        const reason = error.name === 'TimeoutError' ? 'Сервер не відповів за 23 секунди.'
+          : error.name === 'TypeError' ? 'Немає з’єднання із сервером.'
+            : error.message || 'ЛУН тимчасово недоступний.';
+        current.error = `Сторінка ${current.nextPage} · ${reason}`;
+      }
     } finally {
       if (pending === controller) {
         pending = undefined;
         showListings();
       }
     }
+  }
+
+  function refreshCatalog() {
+    if (catalog?.complete) {
+      catalog = newLunCatalog(catalog.region, catalog);
+      catalogs.set(catalog.region, catalog);
+    }
+    loadPages();
   }
 
   function updateLayer() {
@@ -341,15 +358,17 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
       return;
     }
 
-    if (catalog?.region !== region) {
+    const changedRegion = catalog?.region !== region;
+    if (changedRegion) {
       if (catalog) radiusInput.value = '';
-      catalog = { region, items: new Map(), pagesLoaded: 0, totalPages: null, nextPage: 1, complete: false };
+      if (!catalogs.has(region)) catalogs.set(region, newLunCatalog(region));
+      catalog = catalogs.get(region);
       center = regions[region].center;
       centerName = regions[region].city;
     }
     radiusLayer.addTo(map);
     layer.addTo(map);
-    applyRadius();
+    applyRadius(changedRegion);
     if (!catalog.error) loadPages();
   }
 
@@ -368,7 +387,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     chooseCenter(event.latlng);
   });
   map.on('zoomend', () => { if (toggle.checked) drawMarkers(); });
-  retryButton.addEventListener('click', loadPages);
+  retryButton.addEventListener('click', refreshCatalog);
 
   photo.addEventListener('error', () => {
     photo.hidden = true;
