@@ -64,5 +64,29 @@ const call=code=>vm.runInContext('testEval('+JSON.stringify(code)+')',context);
  assert(byId('selected-stops').children[0].children[0].textContent.includes('Конопниця'));
  byId('selected-stops').children[0].children[1].handlers.click();
  assert.equal(byId('selected-stops').children.length,0);
- console.log('Settlement matching, filters, mixed register and LUN routes, and manual pin: passed');
+ const {collectLunCatalog,listingsWithinRadius}=require('../frontend/lun.js');
+ const catalog={region:'lviv',items:new Map(),pagesLoaded:0,totalPages:null,nextPage:1,complete:false};
+ const requests=[];
+ const actualFetch=globalThis.fetch;
+ try {
+   globalThis.fetch=async url=>{
+     const page=Number(new URL(url,'https://example.test').searchParams.get('page'));
+     requests.push(page);
+     if (page===2 && requests.length===2) return Response.json({message:'Source temporarily unavailable'},{status:502});
+     const first={id:'first',lat:49.85,lon:24.02};
+     const distant={id:'distant',lat:48.89,lon:24.02};
+     return Response.json({region:'lviv',page,totalPages:2,items:page===1?[first]:[first,distant]});
+   };
+   const signal=new AbortController().signal;
+   await assert.rejects(collectLunCatalog(catalog,signal,()=>{}),/temporarily unavailable/);
+   assert.equal(catalog.nextPage,2,'Keep the first page when a later page fails');
+   await collectLunCatalog(catalog,signal,()=>{});
+   assert.deepEqual(requests,[1,2,2],'Resume at the failed page');
+   assert.equal(catalog.items.size,2,'Do not duplicate listings across pages');
+   assert.equal(catalog.complete,true);
+   const mapDistance={distance:([lat],[otherLat])=>Math.abs(lat-otherLat)*111000};
+   assert.deepEqual(listingsWithinRadius(catalog.items.values(),mapDistance,[49.85,24.02],45000).map(x=>x.id),['first']);
+   assert.equal(listingsWithinRadius(catalog.items.values(),mapDistance,[49.85,24.02],0).length,2);
+ } finally {globalThis.fetch=actualFetch;}
+ console.log('Settlement matching, filters, mixed routes, LUN radius and page resume, and manual pin: passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

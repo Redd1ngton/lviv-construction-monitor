@@ -1,4 +1,72 @@
-window.initLunLayer = function initLunLayer(map, route, regionNamesReady) {
+async function loadLunPage(region, page, signal) {
+  const params = new URLSearchParams({ region, page: String(page) });
+  const response = await fetch('/api/lun?' + params, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(23000)])
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Сторінка ЛУН недоступна.');
+  if (data.region !== region || data.page !== page || !Array.isArray(data.items)) {
+    throw new Error('ЛУН повернув іншу сторінку.');
+  }
+  return data;
+}
+
+async function readSavedLunCatalog(region, signal) {
+  try {
+    const response = await fetch('./lun-data/' + encodeURIComponent(region) + '.json.gz', { signal });
+    if (!response.ok) return null;
+    const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
+    const data = await new Response(stream).json();
+    if (data.region !== region || !Array.isArray(data.items) ||
+        !Number.isSafeInteger(data.pagesLoaded) || !Number.isSafeInteger(data.totalPages) ||
+        data.pagesLoaded < 1 || data.pagesLoaded > data.totalPages) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+async function collectLunCatalog(catalog, signal, onPage) {
+  while (!catalog.complete) {
+    signal.throwIfAborted();
+    const page = catalog.nextPage;
+    const data = await loadLunPage(catalog.region, page, signal);
+    if (data.snapshot) {
+      if (!catalog.pagesLoaded) {
+        catalog.items = new Map(data.items.map(item => [item.id, item]));
+        catalog.pagesLoaded = 1;
+        catalog.savedAt = data.fetchedAt;
+      }
+      catalog.error = data.message || 'ЛУН тимчасово недоступний.';
+      onPage();
+      return;
+    }
+
+    if (!Number.isSafeInteger(data.totalPages) || data.totalPages < 1) {
+      throw new Error('ЛУН не повідомив кількість сторінок.');
+    }
+    if (page === 1) {
+      catalog.items.clear();
+      catalog.savedAt = null;
+    }
+    for (const item of data.items) catalog.items.set(item.id, item);
+    catalog.pagesLoaded = page;
+    catalog.totalPages = data.totalPages;
+    catalog.nextPage = page + 1;
+    catalog.complete = page >= data.totalPages;
+    onPage();
+
+    if (!catalog.complete) await new Promise(resolve => setTimeout(resolve, 900));
+  }
+}
+
+function listingsWithinRadius(items, map, center, meters) {
+  return [...items].filter(item => !meters || !center || map.distance(center, [item.lat, item.lon]) <= meters);
+}
+
+if (typeof module !== 'undefined') module.exports = { collectLunCatalog, listingsWithinRadius };
+
+if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(map, route, regionNamesReady) {
   const byId = id => document.getElementById(id);
   const panel = byId('lun-panel');
   const toggle = byId('lun-toggle');
@@ -9,11 +77,21 @@ window.initLunLayer = function initLunLayer(map, route, regionNamesReady) {
   const photo = byId('lun-photo');
   const photoStatus = byId('lun-photo-status');
   const routeButton = byId('lun-route');
+  const radiusInput = byId('lun-radius');
+  const centerButton = byId('lun-pick-center');
+  const centerStatus = byId('lun-center-status');
+  const retryButton = byId('lun-retry');
+  const progress = byId('lun-progress');
   const layer = L.layerGroup();
+  const radiusLayer = L.layerGroup();
 
   let regions = {};
-  let activeRegion = '';
+  let catalog;
   let pending;
+  let center;
+  let pickingCenter = false;
+  let visibleItems = [];
+  let renderTimer;
   let activeGroup = [];
   let activeListing;
 
@@ -56,98 +134,218 @@ window.initLunLayer = function initLunLayer(map, route, regionNamesReady) {
     showListing(group[0]);
   }
 
-  function renderListings(items) {
+  function drawMarkers() {
+    layer.clearLayers();
     const groups = new Map();
-    for (const listing of items) {
-      const key = listing.lat.toFixed(6) + ',' + listing.lon.toFixed(6);
+    const zoom = map.getZoom();
+    const cluster = visibleItems.length > 150 && zoom < 15;
+
+    for (const listing of visibleItems) {
+      const point = cluster && map.project([listing.lat, listing.lon], zoom);
+      const key = point
+        ? Math.floor(point.x / 34) + ',' + Math.floor(point.y / 34)
+        : listing.lat.toFixed(6) + ',' + listing.lon.toFixed(6);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(listing);
     }
 
     for (const group of groups.values()) {
       const listing = group[0];
-      const title = ['ЛУН', listing.locality, listing.address].filter(Boolean).join(' · ');
+      const title = group.length > 1
+        ? 'ЛУН · ' + group.length + ' оголошень'
+        : ['ЛУН', listing.locality, listing.address].filter(Boolean).join(' · ');
+      const size = group.length > 99 ? 34 : 24;
       const marker = L.marker([listing.lat, listing.lon], {
         icon: L.divIcon({
           className: 'lun-marker',
           html: '<span class="lun-pin">' + (group.length > 1 ? group.length : '⌂') + '</span>',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2]
         }),
         title,
         alt: title,
         zIndexOffset: 250,
         bubblingMouseEvents: false
       });
-      marker.on('mouseover click', () => showGroup(group));
+      marker.on('mouseover click', () => { if (!pickingCenter) showGroup(group); });
       marker.addTo(layer);
     }
   }
 
-  async function updateLayer() {
+  function radiusMeters() {
+    const value = radiusInput.valueAsNumber;
+    return Number.isFinite(value) && value > 0 ? value * 1000 : 0;
+  }
+
+  function updateStatus() {
+    progress.hidden = !pending || !catalog;
+    retryButton.hidden = !toggle.checked || !catalog?.error || Boolean(pending);
+    if (!toggle.checked || !catalog) return;
+
+    const pages = catalog.totalPages === null
+      ? `${catalog.pagesLoaded} стор.`
+      : `${catalog.pagesLoaded} із ${catalog.totalPages} стор.`;
+    if (pending && catalog.totalPages !== null && !catalog.savedAt) {
+      progress.max = catalog.totalPages;
+      progress.value = catalog.pagesLoaded;
+    } else {
+      progress.removeAttribute('value');
+    }
+
+    const count = `На карті ${visibleItems.length} із ${catalog.items.size} оголошень`;
+    const date = catalog.savedAt && new Date(catalog.savedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' });
+    const savedNotice = date ? ' Збережені дані від ' + date + '.' : '';
+    retryButton.textContent = date ? 'Оновити з ЛУН' : 'Продовжити завантаження';
+    if (catalog.error) {
+      status.textContent = `${count} · ${pages}.${savedNotice} ${catalog.error}`;
+    } else if (pending) {
+      const activity = date ? 'Перевіряємо свіжі дані ЛУН' : 'Завантажуємо сторінки ЛУН';
+      status.textContent = `${activity} · ${pages}. ${count}.${savedNotice}`;
+    } else {
+      status.textContent = `${count} · ${pages}.${savedNotice}`;
+    }
+  }
+
+  function fitPoints(points) {
+    if (!points.length) return;
+    const size = map.getSize();
+    const useSidePadding = size.x - panel.offsetWidth > 240;
+    const paddingTopLeft = [24, useSidePadding ? 24 : Math.min(panel.offsetHeight + 24, size.y * 0.62)];
+    const paddingBottomRight = [useSidePadding ? panel.offsetWidth + 24 : 24, 24];
+    map.fitBounds(points, { paddingTopLeft, paddingBottomRight, maxZoom: 13 });
+  }
+
+  function showListings(fit = false) {
+    clearTimeout(renderTimer);
+    renderTimer = undefined;
+    if (!toggle.checked || !catalog) return;
+    const meters = radiusMeters();
+    visibleItems = listingsWithinRadius(catalog.items.values(), map, center, meters);
+    if (activeListing && !visibleItems.some(item => item.id === activeListing.id)) {
+      activeGroup = [];
+      activeListing = undefined;
+      preview.hidden = true;
+    }
+    drawMarkers();
+    updateStatus();
+    if (fit) fitPoints(visibleItems.map(({ lat, lon }) => [lat, lon]));
+  }
+
+  function applyRadius(fit = false) {
+    radiusLayer.clearLayers();
+    const meters = radiusMeters();
+    if (meters && !center) center = map.getCenter();
+    centerStatus.textContent = pickingCenter ? 'Натисніть на карті, щоб задати центр.'
+      : meters ? 'Можна змінити центр на карті.' : 'Порожнє поле показує всю область.';
+    showListings();
+    if (meters && toggle.checked && catalog) {
+      const circle = L.circle(center, {
+        radius: meters, color: '#7c3aed', weight: 2, fillOpacity: 0.08, interactive: false
+      }).addTo(radiusLayer);
+      if (fit) fitPoints([circle.getBounds().getSouthWest(), circle.getBounds().getNorthEast()]);
+    }
+  }
+
+  function setPickingCenter(active) {
+    pickingCenter = active;
+    centerButton.textContent = active ? 'Скасувати вибір' : 'Вказати центр на карті';
+    map.getContainer().classList.toggle('lun-pick-center', active);
+    centerStatus.textContent = active ? 'Натисніть на карті, щоб задати центр.'
+      : radiusMeters() ? 'Можна змінити центр на карті.' : 'Порожнє поле показує всю область.';
+  }
+
+  async function loadPages() {
+    if (!catalog || pending || catalog.complete) return;
+    const current = catalog;
+    const controller = new AbortController();
+    pending = controller;
+    current.error = '';
+    updateStatus();
+    try {
+      if (!current.pagesLoaded) {
+        const saved = await readSavedLunCatalog(current.region, controller.signal);
+        controller.signal.throwIfAborted();
+        if (saved) {
+          current.items = new Map(saved.items.map(item => [item.id, item]));
+          current.pagesLoaded = saved.pagesLoaded;
+          current.totalPages = saved.totalPages;
+          current.savedAt = saved.fetchedAt;
+          showListings(!radiusMeters());
+        }
+      }
+      await collectLunCatalog(current, controller.signal, () => {
+        if (pending !== controller) return;
+        if (current.pagesLoaded === 1 || current.complete || current.savedAt) {
+          showListings(current.pagesLoaded === 1 && !radiusMeters());
+        } else if (!renderTimer) {
+          renderTimer = setTimeout(showListings, 1300);
+        }
+        updateStatus();
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) current.error = error.message || 'ЛУН тимчасово недоступний.';
+    } finally {
+      if (pending === controller) {
+        pending = undefined;
+        showListings();
+      }
+    }
+  }
+
+  function updateLayer() {
     const selected = [...(window.CollectionManager?.selectedKeys ?? [])];
     const region = regionSelect.value || (selected.length === 1 ? selected[0] : '');
-    if (toggle.checked && region && region === activeRegion) return;
+    if (toggle.checked && catalog?.region === region && map.hasLayer(layer)) return;
 
     pending?.abort();
     pending = undefined;
-    activeRegion = '';
+    clearTimeout(renderTimer);
+    renderTimer = undefined;
+    setPickingCenter(false);
     activeGroup = [];
     activeListing = undefined;
     preview.hidden = true;
     map.removeLayer(layer);
+    map.removeLayer(radiusLayer);
     layer.clearLayers();
+    radiusLayer.clearLayers();
+    visibleItems = [];
 
-    if (!toggle.checked) {
-      status.textContent = 'Увімкніть точки, щоб переглянути будинки.';
+    const ready = toggle.checked && Object.hasOwn(regions, region);
+    radiusInput.disabled = !ready;
+    centerButton.disabled = !ready;
+    if (!ready) {
+      updateStatus();
+      retryButton.hidden = true;
+      status.textContent = !toggle.checked ? 'Увімкніть точки, щоб переглянути будинки.'
+        : !region ? 'Оберіть одну область у панелі ЛУН.'
+          : 'Для цієї області добірка ЛУН недоступна. Виберіть іншу область.';
       return;
     }
-    if (!region) {
-      status.textContent = 'Оберіть одну область у панелі ЛУН.';
-      return;
-    }
-    if (!Object.hasOwn(regions, region)) {
-      status.textContent = 'Для цієї області добірка ЛУН недоступна. Виберіть іншу область у панелі.';
-      return;
-    }
 
-    activeRegion = region;
-    const controller = new AbortController();
-    pending = controller;
-    status.textContent = 'Завантажуємо оголошення ЛУН…';
-    const timeout = setTimeout(() => controller.abort(), 12000);
-    try {
-      const response = await fetch('/api/lun?' + new URLSearchParams({ region }), { signal: controller.signal });
-      const data = await response.json();
-      if (!response.ok || data.region !== region || !Array.isArray(data.items)) throw new Error('Invalid LUN response');
-      if (pending !== controller) return;
-
-      renderListings(data.items);
-      layer.addTo(map);
-      const snapshotDate = data.snapshot && data.fetchedAt
-        ? ' · збережені дані від ' + new Date(data.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' })
-        : '';
-      status.textContent = data.items.length
-        ? `${data.items.length} оголошень із першої сторінки${snapshotDate}. Наведіть або натисніть точку.`
-        : 'Для цієї області немає оголошень із координатами.';
-      if (data.items.length) {
-        const size = map.getSize();
-        const useSidePadding = size.x - panel.offsetWidth > 240;
-        const paddingTopLeft = [24, useSidePadding ? 24 : Math.min(panel.offsetHeight + 24, size.y * 0.62)];
-        const paddingBottomRight = [useSidePadding ? panel.offsetWidth + 24 : 24, 24];
-        map.fitBounds(data.items.map(({ lat, lon }) => [lat, lon]), { paddingTopLeft, paddingBottomRight, maxZoom: 13 });
-      }
-    } catch {
-      if (pending !== controller) return;
-      activeRegion = '';
-      layer.clearLayers();
-      toggle.checked = false;
-      status.textContent = 'ЛУН тимчасово недоступний. Увімкніть точки повторно, щоб спробувати ще раз.';
-    } finally {
-      clearTimeout(timeout);
-      if (pending === controller) pending = undefined;
+    if (catalog?.region !== region) {
+      if (catalog) radiusInput.value = '';
+      catalog = { region, items: new Map(), pagesLoaded: 0, totalPages: null, nextPage: 1, complete: false };
+      center = undefined;
     }
+    radiusLayer.addTo(map);
+    layer.addTo(map);
+    applyRadius();
+    if (!catalog.error) loadPages();
   }
+
+  centerButton.addEventListener('click', () => setPickingCenter(!pickingCenter));
+  radiusInput.addEventListener('change', () => applyRadius(true));
+  map.on('click', event => {
+    if (!pickingCenter) return;
+    event.lunCenterPicked = true;
+    center = event.latlng;
+    if (!radiusMeters()) radiusInput.value = '45';
+    setPickingCenter(false);
+    applyRadius(true);
+  });
+  map.on('zoomend', () => { if (toggle.checked) drawMarkers(); });
+  retryButton.addEventListener('click', loadPages);
 
   photo.addEventListener('error', () => {
     photo.hidden = true;

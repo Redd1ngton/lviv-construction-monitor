@@ -192,6 +192,11 @@
       border: 1px solid var(--border); border-radius: 6px;
     }
     .lun-panel-body p { margin: 0; }
+    .lun-radius-controls { display: grid; grid-template-columns: 6rem 1fr; gap: .45rem; align-items: end; }
+    .lun-radius-controls label { display: grid; gap: .2rem; }
+    .lun-radius-controls button, #lun-retry { padding: .38rem .55rem; font: inherit; }
+    #lun-progress { width: 100%; height: .45rem; accent-color: #a78bfa; }
+    .lun-pick-center, .lun-pick-center .leaflet-interactive { cursor: crosshair; }
     .lun-preview { border-top: 1px solid var(--border); padding-top: .55rem; }
     .lun-preview img { display: block; width: 100%; height: clamp(78px, 15vh, 125px); object-fit: cover; border-radius: 6px; }
     .lun-preview img[hidden] { display: none; }
@@ -336,9 +341,16 @@
             <select id="lun-region" disabled>
               <option value="">За вибором у моніторі</option>
             </select>
+            <div class="lun-radius-controls">
+              <label>Радіус, км <input type="number" id="lun-radius" min="1" step="any" placeholder="Усі" disabled></label>
+              <button id="lun-pick-center" type="button" class="secondary" disabled>Вказати центр на карті</button>
+            </div>
+            <small id="lun-center-status" aria-live="polite">Порожнє поле показує всю область.</small>
+            <progress id="lun-progress" aria-label="Завантаження сторінок ЛУН" hidden></progress>
+            <button id="lun-retry" type="button" class="secondary" hidden>Повторити завантаження</button>
             <p id="lun-status" role="status">Увімкніть точки, щоб переглянути будинки.</p>
             <div id="lun-preview" class="lun-preview" hidden>
-              <label id="lun-listing-label" hidden>Оголошення в цій точці
+              <label id="lun-listing-label" hidden>Оголошення біля цієї точки
                 <select id="lun-listing"></select>
               </label>
               <img id="lun-photo" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">
@@ -361,8 +373,8 @@
   <script defer src="geo.js?v=20261110-7"></script>
   <script defer src="datasets.js?v=20261110-7"></script>
   <script defer src="collection.js?v=20261110-7"></script>
-  <script defer src="lun.js?v=4"></script>
-  <script defer src="app.js?v=20261112-3"></script>
+  <script defer src="lun.js?v=5"></script>
+  <script defer src="app.js?v=20261112-4"></script>
   <script defer src="snapshots.js?v=20261110-7"></script>
 
 </body>
