@@ -178,6 +178,7 @@ function initMap() {
   map=L.map('map').setView([49,31],6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap · населені пункти: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0)',maxZoom:19}).addTo(map);
   markersLayer=L.layerGroup().addTo(map);routeLayer=L.layerGroup().addTo(map);
+  window.initLunLayer?.(map);
   map.on('click',event=>{ if(pinTarget){$('pin-lat').value=event.latlng.lat.toFixed(6);$('pin-lon').value=event.latlng.lng.toFixed(6);$('pin-message').textContent='Точку обрано. Натисніть «Зберегти точку».';} });
 }
 function updateMarkers(fit=true) {

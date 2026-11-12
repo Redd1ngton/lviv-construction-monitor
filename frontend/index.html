@@ -296,6 +296,10 @@
         <label>Довгота<input id="pin-lon" type="number" step="any" required></label>
         <button type="submit">Зберегти точку</button><button id="pin-cancel" class="secondary" type="button">Скасувати</button>
       </form>
+      <div class="map-info">
+        <label><input type="checkbox" id="lun-toggle" disabled> Продаж будинків · ЛУН</label>
+        <small id="lun-status" role="status">Львів і околиці, перша сторінка добірки.</small>
+      </div>
       <div id="map"></div>
       <div class="route-panel" id="route-panel">
         Оберіть кілька об’єктів з координатами і натисніть «Побудувати маршрут».
@@ -307,7 +311,8 @@
   <script defer src="geo.js?v=20261110-7"></script>
   <script defer src="datasets.js?v=20261110-7"></script>
   <script defer src="collection.js?v=20261110-7"></script>
-  <script defer src="app.js?v=20261110-7"></script>
+  <script defer src="lun.js?v=1"></script>
+  <script defer src="app.js?v=20261112-1"></script>
   <script defer src="snapshots.js?v=20261110-7"></script>
 
 </body>
