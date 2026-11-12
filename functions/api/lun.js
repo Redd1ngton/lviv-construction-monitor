@@ -103,7 +103,7 @@ export async function onRequest({ request, ctx }) {
     return Response.json({ message: 'Некоректний номер сторінки ЛУН.' }, { status: 400 });
   }
 
-  const source = new URL(regionPages[region], origin);
+  const source = new URL(regionPages[region].path, origin);
   if (page > 1) source.searchParams.set('page', String(page));
   const key = new URL('/api/lun', request.url);
   key.search = new URLSearchParams({ region, page: String(page), version: '3' });

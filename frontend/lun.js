@@ -89,6 +89,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   let catalog;
   let pending;
   let center;
+  let centerName;
+  let radiusTimer;
   let pickingCenter = false;
   let visibleItems = [];
   let renderTimer;
@@ -167,7 +169,11 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
         zIndexOffset: 250,
         bubblingMouseEvents: false
       });
-      marker.on('mouseover click', () => { if (!pickingCenter) showGroup(group); });
+      marker.on('mouseover', () => { if (!pickingCenter) showGroup(group); });
+      marker.on('click', event => {
+        if (pickingCenter) chooseCenter(event.latlng);
+        else showGroup(group);
+      });
       marker.addTo(layer);
     }
   }
@@ -183,8 +189,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     if (!toggle.checked || !catalog) return;
 
     const pages = catalog.totalPages === null
-      ? `${catalog.pagesLoaded} стор.`
-      : `${catalog.pagesLoaded} із ${catalog.totalPages} стор.`;
+      ? `Сторінок ${catalog.pagesLoaded}`
+      : `Сторінки ${catalog.pagesLoaded} із ${catalog.totalPages}`;
     if (pending && catalog.totalPages !== null && !catalog.savedAt) {
       progress.max = catalog.totalPages;
       progress.value = catalog.pagesLoaded;
@@ -231,12 +237,16 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     if (fit) fitPoints(visibleItems.map(({ lat, lon }) => [lat, lon]));
   }
 
+  function updateCenterStatus() {
+    centerStatus.textContent = pickingCenter ? 'Натисніть на карті, щоб задати центр.'
+      : radiusMeters() ? (centerName ? 'Центр радіуса · ' + centerName : 'Центр обрано на карті.')
+        : 'Порожнє поле показує всю область.';
+  }
+
   function applyRadius(fit = false) {
     radiusLayer.clearLayers();
     const meters = radiusMeters();
-    if (meters && !center) center = map.getCenter();
-    centerStatus.textContent = pickingCenter ? 'Натисніть на карті, щоб задати центр.'
-      : meters ? 'Можна змінити центр на карті.' : 'Порожнє поле показує всю область.';
+    updateCenterStatus();
     showListings();
     if (meters && toggle.checked && catalog) {
       const circle = L.circle(center, {
@@ -250,8 +260,15 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     pickingCenter = active;
     centerButton.textContent = active ? 'Скасувати вибір' : 'Вказати центр на карті';
     map.getContainer().classList.toggle('lun-pick-center', active);
-    centerStatus.textContent = active ? 'Натисніть на карті, щоб задати центр.'
-      : radiusMeters() ? 'Можна змінити центр на карті.' : 'Порожнє поле показує всю область.';
+    updateCenterStatus();
+  }
+
+  function chooseCenter(latlng) {
+    center = latlng;
+    centerName = '';
+    if (!radiusMeters()) radiusInput.value = '45';
+    setPickingCenter(false);
+    applyRadius(true);
   }
 
   async function loadPages() {
@@ -299,6 +316,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
 
     pending?.abort();
     pending = undefined;
+    clearTimeout(radiusTimer);
     clearTimeout(renderTimer);
     renderTimer = undefined;
     setPickingCenter(false);
@@ -326,7 +344,8 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     if (catalog?.region !== region) {
       if (catalog) radiusInput.value = '';
       catalog = { region, items: new Map(), pagesLoaded: 0, totalPages: null, nextPage: 1, complete: false };
-      center = undefined;
+      center = regions[region].center;
+      centerName = regions[region].city;
     }
     radiusLayer.addTo(map);
     layer.addTo(map);
@@ -335,14 +354,18 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
   }
 
   centerButton.addEventListener('click', () => setPickingCenter(!pickingCenter));
-  radiusInput.addEventListener('change', () => applyRadius(true));
+  radiusInput.addEventListener('input', () => {
+    clearTimeout(radiusTimer);
+    radiusTimer = setTimeout(applyRadius, 180);
+  });
+  radiusInput.addEventListener('change', () => {
+    clearTimeout(radiusTimer);
+    applyRadius(true);
+  });
   map.on('click', event => {
     if (!pickingCenter) return;
     event.lunCenterPicked = true;
-    center = event.latlng;
-    if (!radiusMeters()) radiusInput.value = '45';
-    setPickingCenter(false);
-    applyRadius(true);
+    chooseCenter(event.latlng);
   });
   map.on('zoomend', () => { if (toggle.checked) drawMarkers(); });
   retryButton.addEventListener('click', loadPages);
