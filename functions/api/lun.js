@@ -114,6 +114,7 @@ export async function onRequest({ request, ctx }) {
   let message = 'Не вдалося отримати сторінку від ЛУН.';
   let responseStatus = 502;
   let retryAfter;
+  let retryable = true;
   try {
     const upstream = await fetch(source.href, {
       redirect: 'manual',
@@ -132,6 +133,7 @@ export async function onRequest({ request, ctx }) {
     }
 
     responseStatus = upstream.status === 429 ? 429 : 502;
+    retryable = upstream.status === 429 || upstream.status >= 500;
     retryAfter = upstream.headers.get('Retry-After');
     message = upstream.status === 429
       ? 'ЛУН тимчасово обмежив частоту запитів.'
@@ -146,8 +148,8 @@ export async function onRequest({ request, ctx }) {
   const snapshot = page === 1 ? snapshots[region] : undefined;
   if (snapshot) {
     return Response.json({
-      ...snapshot, page, totalPages: null, snapshot: true, source: source.href, region, message
+      ...snapshot, page, totalPages: null, snapshot: true, source: source.href, region, message, retryable
     }, { headers });
   }
-  return Response.json({ page, region, message }, { status: responseStatus, headers });
+  return Response.json({ page, region, message, retryable }, { status: responseStatus, headers });
 }

@@ -1,14 +1,28 @@
 async function loadLunPage(region, page, signal) {
   const params = new URLSearchParams({ region, page: String(page) });
-  const response = await fetch('/api/lun?' + params, {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(23000)])
-  });
+  let response;
+  try {
+    response = await fetch('/api/lun?' + params, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(23000)])
+    });
+  } catch (error) {
+    signal.throwIfAborted();
+    throw Object.assign(error, { retryable: true });
+  }
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.message || `Сервер повернув HTTP ${response.status}.`);
+  const retryAfter = response.headers.get('Retry-After');
+  const retryMs = retryAfter && (/^\d+$/.test(retryAfter)
+    ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now());
+  if (!response.ok) {
+    throw Object.assign(new Error(data?.message || `Сервер повернув HTTP ${response.status}.`), {
+      retryable: data?.retryable ?? [429, 502, 503, 504].includes(response.status),
+      retryMs
+    });
+  }
   if (data?.region !== region || data.page !== page || !Array.isArray(data.items)) {
     throw new Error('ЛУН повернув іншу сторінку.');
   }
-  return data;
+  return { ...data, retryMs };
 }
 
 async function readSavedLunCatalog(region, signal) {
@@ -26,20 +40,52 @@ async function readSavedLunCatalog(region, signal) {
   }
 }
 
-async function collectLunCatalog(catalog, signal, onPage) {
+function waitForLun(ms, signal) {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve();
+    }, ms);
+    function cancel() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener('abort', cancel, { once: true });
+  });
+}
+
+async function collectLunCatalog(catalog, signal, onPage, wait = waitForLun) {
+  let failures = 0;
   while (!catalog.complete) {
     signal.throwIfAborted();
     const page = catalog.nextPage;
-    const data = await loadLunPage(catalog.region, page, signal);
+    let data;
+    let failure;
+    try {
+      data = await loadLunPage(catalog.region, page, signal);
+    } catch (error) {
+      failure = error;
+    }
     signal.throwIfAborted();
-    if (data.snapshot) {
+    if (data?.snapshot) {
       if (!catalog.pagesLoaded && !catalog.saved) {
         catalog.saved = { ...data, items: new Map(data.items.map(item => [item.id, item])), pagesLoaded: 1 };
       }
-      catalog.error = data.message || 'ЛУН тимчасово недоступний.';
-      onPage();
-      return;
+      failure = Object.assign(new Error(data.message || 'ЛУН тимчасово недоступний.'), data);
     }
+    if (failure) {
+      if (!failure.retryable || failures >= 3) throw failure;
+      const delay = Math.max(2000 * 2 ** failures++, failure.retryMs || 0);
+      // Long source pauses require a later user retry rather than a browser timer.
+      if (delay > 300000) throw failure;
+      catalog.retryMessage = `Сторінка ${page} · ${failure.message} Повтор через ${Math.ceil(delay / 1000)} с.`;
+      onPage();
+      await wait(delay, signal);
+      catalog.retryMessage = '';
+      continue;
+    }
+    failures = 0;
 
     if (!Number.isSafeInteger(data.totalPages) || data.totalPages < 1) {
       throw new Error('ЛУН не повідомив кількість сторінок.');
@@ -53,7 +99,7 @@ async function collectLunCatalog(catalog, signal, onPage) {
     if (catalog.complete || catalog.saved?.totalPages === null) catalog.saved = null;
     onPage();
 
-    if (!catalog.complete) await new Promise(resolve => setTimeout(resolve, 900));
+    if (!catalog.complete) await wait(900, signal);
   }
 }
 
@@ -205,7 +251,9 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     const date = catalog.saved?.fetchedAt && new Date(catalog.saved.fetchedAt).toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' });
     const savedNotice = date ? ' Збережені дані від ' + date + '.' : '';
     retryButton.textContent = catalog.nextPage === 1 || catalog.complete ? 'Оновити з ЛУН' : 'Продовжити завантаження';
-    if (catalog.error) {
+    if (catalog.retryMessage && pending) {
+      status.textContent = `${count} · ${pages}.${savedNotice} ${catalog.retryMessage}`;
+    } else if (catalog.error) {
       status.textContent = `${count} · ${pages}.${savedNotice} ${catalog.error}`;
     } else if (pending) {
       const activity = catalog.saved ? 'Оновлюємо з ЛУН' : 'Завантажуємо сторінки ЛУН';
@@ -283,6 +331,7 @@ if (typeof window !== 'undefined') window.initLunLayer = function initLunLayer(m
     const controller = new AbortController();
     pending = controller;
     current.error = '';
+    current.retryMessage = '';
     updateStatus();
     try {
       if (!current.pagesLoaded && !current.saved) {
