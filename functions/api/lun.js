@@ -4,6 +4,7 @@ import snapshots from './lun-snapshot.json' with { type: 'json' };
 
 const origin = 'https://lun.ua';
 const pictureHost = 'market-images.lunstatic.net';
+const pageSize = 24;
 
 function httpsUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) return null;
@@ -15,14 +16,20 @@ function httpsUrl(value) {
   }
 }
 
-function readCards(html) {
+function readPage(html) {
   // Read the listing cards already included in the public page. Never execute embedded scripts.
   const chunks = html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g);
   const payload = Array.from(chunks, match => JSON.parse(match[1])).join('');
   const row = payload.match(/[a-f\d]+:(\["\$","\$L[a-f\d]+",null,\{"realties":[^\n]*)/);
-  const cards = row && JSON.parse(row[1])[3]?.realties?.cards;
-  if (!Array.isArray(cards)) throw new Error('Missing LUN listing cards');
-  return cards;
+  const model = row && JSON.parse(row[1])[3];
+  const { cards, totalGroupedCount } = model?.realties ?? {};
+  const page = Number(new URLSearchParams(model?.initialValuesStr).get('page') ?? 1);
+  if (!Array.isArray(cards) || !Number.isSafeInteger(totalGroupedCount) || totalGroupedCount < 0 ||
+      !Number.isSafeInteger(page) || page < 1) {
+    throw new Error('Missing LUN page metadata');
+  }
+  const totalPages = Math.max(1, Math.ceil(totalGroupedCount / pageSize));
+  return { cards, page, totalPages };
 }
 
 function readPhotos(html) {
@@ -43,13 +50,13 @@ function readPhotos(html) {
   return photos;
 }
 
-export function parseListings(html, region) {
-  const cards = readCards(html);
+export function parseLunPage(html, region) {
+  const { cards, page, totalPages } = readPage(html);
   const photos = readPhotos(html);
   const items = new Map();
   const expectedRegion = regionNames[region] + ' область';
 
-  for (const card of cards.slice(0, 50)) {
+  for (const card of cards) {
     if (!Array.isArray(card?.location)) continue;
     const [lon, lat] = card.location;
     const link = httpsUrl(card.urlRaw);
@@ -80,41 +87,63 @@ export function parseListings(html, region) {
     });
   }
 
-  if (cards.length && !items.size) throw new Error('No usable LUN listings for this region');
-  return [...items.values()];
+  return { page, totalPages, items: [...items.values()] };
 }
 
 export async function onRequest({ request, ctx }) {
   if (request.method !== 'GET') return new Response(null, { status: 405, headers: { Allow: 'GET' } });
-  const region = new URL(request.url).searchParams.get('region') ?? 'lviv';
+  const params = new URL(request.url).searchParams;
+  const region = params.get('region') ?? 'lviv';
+  const pageText = params.get('page') ?? '1';
+  const page = Number(pageText);
   if (!Object.hasOwn(regionPages, region)) {
     return Response.json({ message: 'ЛУН не надає добірку будинків для цієї області.' }, { status: 400 });
   }
+  if (!/^[1-9]\d*$/.test(pageText) || !Number.isSafeInteger(page)) {
+    return Response.json({ message: 'Некоректний номер сторінки ЛУН.' }, { status: 400 });
+  }
 
-  const source = origin + regionPages[region];
+  const source = new URL(regionPages[region], origin);
+  if (page > 1) source.searchParams.set('page', String(page));
   const key = new URL('/api/lun', request.url);
-  key.search = new URLSearchParams({ region, version: '2' });
+  key.search = new URLSearchParams({ region, page: String(page), version: '3' });
   const cache = globalThis.caches?.default;
   const cached = await cache?.match(key.href).catch(() => undefined);
   if (cached) return cached;
 
-  let data;
-  let maxAge = 900;
+  let message = 'Не вдалося отримати сторінку від ЛУН.';
+  let responseStatus = 502;
+  let retryAfter;
   try {
-    const upstream = await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(6500) });
-    if (!upstream.ok) throw new Error('LUN source unavailable');
-    const items = parseListings(await upstream.text(), region);
-    data = { items, fetchedAt: new Date().toISOString() };
-  } catch {
-    const snapshot = snapshots[region];
-    if (!snapshot) return Response.json({ message: 'ЛУН тимчасово недоступний.' }, { status: 502 });
-    data = { ...snapshot, snapshot: true };
-    maxAge = 300;
+    const upstream = await fetch(source.href, { redirect: 'error', signal: AbortSignal.timeout(18000) });
+    if (upstream.ok) {
+      message = 'ЛУН не повернув дані запитаної сторінки.';
+      const data = parseLunPage(await upstream.text(), region);
+      if (data.page !== page) throw new Error('LUN returned a different page');
+      const response = Response.json({ ...data, source: source.href, region, fetchedAt: new Date().toISOString() }, {
+        headers: { 'Cache-Control': 'public, max-age=1800' }
+      });
+      if (cache && ctx) ctx.waitUntil(cache.put(key.href, response.clone()).catch(() => {}));
+      return response;
+    }
+
+    responseStatus = upstream.status === 429 ? 429 : 502;
+    retryAfter = upstream.headers.get('Retry-After');
+    message = upstream.status === 429
+      ? 'ЛУН тимчасово обмежив частоту запитів.'
+      : `ЛУН повернув HTTP ${upstream.status}.`;
+    await upstream.body?.cancel();
+  } catch (error) {
+    if (error.name === 'TimeoutError') message = 'ЛУН не відповів за 18 секунд.';
   }
 
-  const response = Response.json({ ...data, source, region }, {
-    headers: { 'Cache-Control': `public, max-age=${maxAge}` }
-  });
-  if (cache && ctx) ctx.waitUntil(cache.put(key.href, response.clone()).catch(() => {}));
-  return response;
+  const headers = { 'Cache-Control': 'no-store' };
+  if (retryAfter) headers['Retry-After'] = retryAfter;
+  const snapshot = page === 1 ? snapshots[region] : undefined;
+  if (snapshot) {
+    return Response.json({
+      ...snapshot, page, totalPages: null, snapshot: true, source: source.href, region, message
+    }, { headers });
+  }
+  return Response.json({ page, region, message }, { status: responseStatus, headers });
 }

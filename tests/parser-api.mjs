@@ -46,24 +46,45 @@ const card = {
   geoEntities: [{ type: 'city', name: 'Бобриця' }, { type: 'region', name: 'Київська область' }]
 };
 const cityCard = { ...card, id: 43, geoEntities: [{ type: 'city', name: 'Київ' }, card.geoEntities[1]] };
-const rows = ['$', '$L13', null, { realties: { cards: [card, cityCard, { ...card, id: 44, urlRaw: 'javascript:alert(1)' }] } }];
-const html = `<script>self.__next_f.push(${JSON.stringify([1, 'previous text12:' + JSON.stringify(rows) + '\n'])})</script>
+const lunHtml = (page, cards) => {
+  const rows = ['$', '$L13', null, {
+    realties: { cards, totalGroupedCount: 25 },
+    initialValuesStr: 'geo_id=10000010&page=' + page
+  }];
+  return `<script>self.__next_f.push(${JSON.stringify([1, 'previous text12:' + JSON.stringify(rows) + '\n'])})</script>
 <script id="schema-real-estate" type="application/ld+json">${JSON.stringify({ itemListElement: [{ item: { image: [photo] } }] })}</script>`;
-const lun = region => getLun({ request: new Request('https://example.pages.dev/api/lun?region=' + region) });
+};
+const html = lunHtml(1, [card, cityCard, { ...card, id: 44, urlRaw: 'javascript:alert(1)' }]);
+const lun = (region, page) => getLun({
+  request: new Request('https://example.pages.dev/api/lun?' + new URLSearchParams({ region, ...(page && { page }) }))
+});
 const lunRequests = [];
 globalThis.fetch = async url => {
   lunRequests.push(url);
-  return new Response(html);
+  return new Response(new URL(url).searchParams.get('page') === '2'
+    ? lunHtml(2, [{ ...card, id: 45 }])
+    : html);
 };
 assert.equal((await lun('unrecognized')).status, 400);
+assert.equal((await lun('lviv', '-1')).status, 400);
 assert.equal(lunRequests.length, 0);
 let listings = await (await lun('kyiv-oblast')).json();
 assert.deepEqual(lunRequests, ['https://lun.ua/sale/kyiv/region-houses']);
 assert.equal(listings.items.length, 1, 'Exclude Kyiv city and invalid listing URLs from the oblast');
 assert.equal(listings.items[0].url, card.urlRaw);
 assert.equal(listings.items[0].photo, photo);
+assert.equal(listings.totalPages, 2);
+listings = await (await lun('kyiv-oblast', '2')).json();
+assert.equal(lunRequests[1], 'https://lun.ua/sale/kyiv/region-houses?page=2');
+assert.equal(listings.page, 2);
+assert.equal(listings.items[0].id, '45');
+globalThis.fetch = async () => new Response(html);
+assert.equal((await lun('kyiv-oblast', '2')).status, 502, 'Reject a repeated first page');
+
 globalThis.fetch = async () => new Response('', { status: 403 });
 listings = await (await lun('odesa')).json();
 assert.equal(listings.region, 'odesa');
 assert(listings.snapshot && listings.items.length && listings.items.every(item => item.photo && item.url));
-console.log('LUN API: regional scope, photos, original links and regional fallback passed');
+assert.equal(listings.totalPages, null, 'A saved first page cannot represent the complete catalog');
+assert.equal((await lun('odesa', '2')).status, 502, 'A failed later page must not return the first page');
+console.log('LUN API: regional scope, distinct pages, photos, original links and explicit partial fallback passed');
