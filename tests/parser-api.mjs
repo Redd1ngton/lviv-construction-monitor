@@ -59,7 +59,9 @@ const lun = (region, page) => getLun({
   request: new Request('https://example.pages.dev/api/lun?' + new URLSearchParams({ region, ...(page && { page }) }))
 });
 const lunRequests = [];
-globalThis.fetch = async url => {
+globalThis.fetch = async (url, options) => {
+  assert.equal(options.redirect, 'manual', 'Workers only support follow and manual redirect modes');
+  assert.equal(options.headers.Accept, 'text/html');
   lunRequests.push(url);
   return new Response(new URL(url).searchParams.get('page') === '2'
     ? lunHtml(2, [{ ...card, id: 45 }])
@@ -80,6 +82,14 @@ assert.equal(listings.page, 2);
 assert.equal(listings.items[0].id, '45');
 globalThis.fetch = async () => new Response(html);
 assert.equal((await lun('kyiv-oblast', '2')).status, 502, 'Reject a repeated first page');
+
+let lunRedirects = 0;
+globalThis.fetch = async () => {
+  lunRedirects++;
+  return new Response(null, { status: 302, headers: { Location: 'https://example.test/' } });
+};
+assert.equal((await lun('lviv', '2')).status, 502);
+assert.equal(lunRedirects, 1, 'The Worker must not follow an unexpected external redirect');
 
 globalThis.fetch = async () => new Response('', { status: 403 });
 listings = await (await lun('odesa')).json();

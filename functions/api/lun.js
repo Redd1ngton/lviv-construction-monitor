@@ -115,7 +115,11 @@ export async function onRequest({ request, ctx }) {
   let responseStatus = 502;
   let retryAfter;
   try {
-    const upstream = await fetch(source.href, { redirect: 'error', signal: AbortSignal.timeout(18000) });
+    const upstream = await fetch(source.href, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(18000),
+      headers: { 'User-Agent': 'ConstructionMonitor/3.0', Accept: 'text/html' }
+    });
     if (upstream.ok) {
       message = 'ЛУН не повернув дані запитаної сторінки.';
       const data = parseLunPage(await upstream.text(), region);
