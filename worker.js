@@ -9,3 +9,5 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+// Release marker: simplified parser search UI, 2026-11-20.
