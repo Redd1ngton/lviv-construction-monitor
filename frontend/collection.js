@@ -13,9 +13,12 @@
     }
     $('collection-count').textContent=`Обрано областей: ${selected.size}`;
     const summary=$('region-picker-summary');
-    if(summary)summary.textContent=selected.size
-      ? `Області · ${selected.size} обрано`
-      : 'Обрати області · не обрано';
+    if(summary){
+      const names=[...selected].map(key=>regions[key]).filter(Boolean);
+      summary.textContent=!names.length?'Обрати області · не обрано'
+        :names.length<=2?names.join(', ')
+        :`${names[0]}, ${names[1]} та ще ${names.length-2}`;
+    }
     try{localStorage.setItem('construction-regions-v1',JSON.stringify([...selected]));}catch(_){}
     document.dispatchEvent(new Event('collection-change'));
   }
