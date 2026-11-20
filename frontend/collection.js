@@ -12,6 +12,10 @@
       label.append(input,document.createTextNode(name));$('region-checks').appendChild(label);
     }
     $('collection-count').textContent=`Обрано областей: ${selected.size}`;
+    const summary=$('region-picker-summary');
+    if(summary)summary.textContent=selected.size
+      ? `Області · ${selected.size} обрано`
+      : 'Обрати області · не обрано';
     try{localStorage.setItem('construction-regions-v1',JSON.stringify([...selected]));}catch(_){}
     document.dispatchEvent(new Event('collection-change'));
   }
@@ -76,7 +80,7 @@
     if(!scope.length){$('collection-message').textContent='Оберіть хоча б одну область.';return;}
     if(!Number.isInteger(days)||days<1||days>90){$('collection-message').textContent='Оберіть період від 1 до 90 днів.';return;}
     $('collection-diagnostics').replaceChildren();
-    running=true;draw();$('collection-launch').disabled=true;
+    running=true;draw();$('region-picker').open=false;$('collection-launch').disabled=true;
     const end=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'}),start=new Date(Date.parse(end)-days*86400000).toISOString().slice(0,10);
     const items=new Map(),seen=new Set(),excluded=new Set(window.DatasetManager?.excludedIds||[]);
     let processed=0,skipped=0,filtered=0,complete=false,completedRegions=0;
