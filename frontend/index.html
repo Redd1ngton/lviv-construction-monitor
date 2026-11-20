@@ -181,7 +181,18 @@
     .collection-panel { margin:.5rem 1rem; padding:.75rem; border:1px solid var(--border); border-radius:8px; font-size:.85rem; }
     .collection-panel summary { cursor:pointer; font-weight:600; }.collection-actions { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
     .collection-actions label { display:grid; gap:.2rem; }.collection-actions input { padding:.4rem; background:var(--bg); color:var(--text); border:1px solid var(--border); }
-    .region-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:.4rem; margin:.7rem 0; }
+    .region-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:.4rem; margin:.7rem 0; max-height: min(45vh, 360px); overflow:auto; }
+    .search-launcher h2 { margin:0 0 .7rem; font-size:1rem; }
+    .search-controls { align-items:end; }
+    .search-controls > label { display:grid; gap:.3rem; min-width:170px; color:var(--muted); }
+    .region-picker { position:relative; min-width:min(320px,100%); }
+    .region-picker > summary { list-style:none; cursor:pointer; padding:.65rem .8rem; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--text); }
+    .region-picker > summary::-webkit-details-marker { display:none; }
+    .region-picker > summary::after { content:"▾"; float:right; color:var(--muted); }
+    .region-picker[open] > summary { border-color:var(--accent); }
+    .region-picker-menu { position:absolute; z-index:20; top:calc(100% + .35rem); left:0; width:min(520px, calc(100vw - 2rem)); max-height: min(55vh, 440px); overflow:auto; padding:.7rem; background:var(--card); border:1px solid var(--border); border-radius:9px; box-shadow:0 8px 24px #0008; }
+    .region-picker-menu .collection-actions { margin-bottom:.4rem; }
+    .region-picker-menu .region-checks { margin:.3rem 0 0; }
     .region-checks label { display:flex; gap:.4rem; align-items:center; padding:.25rem; }
     .collection-note { padding:0 1rem; font-size:.8rem; color:var(--muted); }
     .dataset-label { padding:.6rem 1rem 0; color:var(--muted); font-size:.8rem; }
@@ -310,18 +321,36 @@
       <small>Можна працювати з попередніми даними. Залишайте вкладку відкритою; нові результати з’являться після завершення збору. Час приблизний.</small>
     </div>
   </div>
-  <details class="collection-panel" open>
-    <summary>Регіони збору та пошуку</summary>
-    <p>Відмітьте області та період пошуку. Картки читаються безпосередньо з реєстру. Для великого періоду збір може тривати довго.</p>
-    <div class="collection-actions"><button type="button" id="collection-all" class="secondary">Обрати всі</button><button type="button" id="collection-clear" class="secondary">Зняти всі</button><strong id="collection-count"></strong></div>
-    <div id="region-checks" class="region-checks"></div>
-    <div class="collection-actions">
-      <label>За останні дні<input id="collection-days" type="number" min="1" max="90" value="7"></label>
-      <button id="collection-launch" type="button">Запустити парсер</button>
+  <section class="collection-panel search-launcher" aria-label="Запуск пошуку">
+    <h2>Пошук нових об’єктів</h2>
+    <div class="collection-actions search-controls">
+      <details id="region-picker" class="region-picker">
+        <summary id="region-picker-summary">Обрати області · Львівська</summary>
+        <div class="region-picker-menu">
+          <div class="collection-actions">
+            <button type="button" id="collection-all" class="secondary">Усі області</button>
+            <button type="button" id="collection-clear" class="secondary">Очистити</button>
+          </div>
+          <div id="region-checks" class="region-checks"></div>
+        </div>
+      </details>
+      <label>Період пошуку
+        <select id="collection-days">
+          <option value="1">Остання доба</option>
+          <option value="3">Останні 3 дні</option>
+          <option value="7" selected>Останні 7 днів</option>
+          <option value="14">Останні 14 днів</option>
+          <option value="30">Останні 30 днів</option>
+          <option value="60">Останні 60 днів</option>
+          <option value="90">Останні 90 днів</option>
+        </select>
+      </label>
+      <button id="collection-launch" type="button">Запустити пошук</button>
     </div>
+    <p class="collection-note">Оберіть одну або декілька областей, період і запустіть пошук. Збір виконується безпосередньо з ЄДЕССБ.</p>
     <div id="collection-diagnostics" role="status" aria-live="polite"></div>
-    <p id="collection-message" role="status">Галочки визначають області пошуку. Натисніть «Почати збір обраних регіонів», щоб отримати нові дані.</p>
-  </details>
+    <p id="collection-message" role="status">Готовий до пошуку. За замовчуванням обрана Львівська область.</p>
+  </section>
   <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
   <div id="category-tabs" class="category-tabs" role="tablist" aria-label="Типи об’єктів"></div>
   <section class="route-selection" aria-label="Обрані для маршруту">
@@ -429,7 +458,7 @@
   <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="document.dispatchEvent(new Event('leaflet-ready'))"></script>
   <script defer src="geo.js?v=20261110-7"></script>
   <script defer src="datasets.js?v=20261110-7"></script>
-  <script defer src="collection.js?v=20261110-7"></script>
+  <script defer src="collection.js?v=20261120-1"></script>
   <script defer src="lun.js?v=9"></script>
   <script defer src="app.js?v=20261112-5"></script>
   <script defer src="snapshots.js?v=20261110-7"></script>
