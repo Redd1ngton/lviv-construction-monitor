@@ -183,6 +183,9 @@
     .collection-actions label { display:grid; gap:.2rem; }.collection-actions input { padding:.4rem; background:var(--bg); color:var(--text); border:1px solid var(--border); }
     .region-checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:.4rem; margin:.7rem 0; max-height: min(45vh, 360px); overflow:auto; }
     .search-launcher h2 { margin:0 0 .7rem; font-size:1rem; }
+    .advanced-tools { margin:.5rem 1rem; border:1px solid var(--border); border-radius:8px; background:var(--card); }
+    .advanced-tools > summary { cursor:pointer; padding:.75rem 1rem; font-weight:600; }
+    .advanced-tools > .collection-panel, .advanced-tools > .snapshots-panel { margin:.5rem; }
     .search-controls { align-items:end; }
     .search-controls > label { display:grid; gap:.3rem; min-width:170px; color:var(--muted); }
     .region-picker { position:relative; min-width:min(320px,100%); }
@@ -289,39 +292,7 @@
     </div>
   </header>
 
-  <p class="collection-note">1. Оберіть області та запустіть парсер. 2. Збережіть результати. 3. Завантажте попередні результати нижче, щоб виключити їх із наступного пошуку. Залишайте вкладку відкритою під час збору.</p>
-  <button id="btn-force-refresh" type="button" class="secondary">Оновити дані</button>
-  <p id="data-refresh-message" role="status"></p>
-  <section class="collection-panel">
-    <h3>Виключити попередні результати</h3>
-    <label>Завантажити збережені JSON-файли <input id="exclusion-import" type="file" accept=".json,application/json" multiple></label>
-    <button id="exclusion-apply" type="button">Виключити з пошуку</button>
-    <button id="exclusion-clear" type="button" class="secondary">Скасувати виключення</button>
-    <p id="exclusion-message" role="status" aria-live="polite">Немає виключених записів.</p>
-  </section>
-  <details class="snapshots-panel" open>
-    <summary>Знімки парсингу та порівняння</summary>
-    <div class="snapshot-controls">
-      <button type="button" id="snapshot-save" disabled>Зберегти результати</button>
-      <label class="import-label">Імпортувати JSON-файли<input id="snapshot-import" type="file" accept=".json,application/json" multiple></label>
-      <label>Показувати<select id="snapshot-mode"><option value="live">Поточний парсер</option><option value="all">Усі обрані результати разом</option><option value="new">Лише нові відносно знімка</option><option value="changed">Лише змінені записи</option></select></label>
-      <label>Порівняти зі знімком<select id="snapshot-baseline"><option value="">Оберіть попередній знімок</option></select></label>
-      <label><input id="snapshot-include-live" type="checkbox" checked> Додавати актуальний парсер до порівняння</label>
-    </div>
-    <div id="snapshot-list"></div><p id="snapshot-message" role="status" aria-live="polite">Можна імпортувати кілька JSON-файлів. Номери документів використовуються для порівняння.</p>
-    <small>Знімки залишаються у цьому браузері. JSON-файл дозволяє відкрити їх через тиждень або на іншому пристрої.</small>
-  </details>
-  <div id="collection-loading" hidden class="collection-loading" role="status" aria-live="polite">
-    <div class="collection-loading-card">
-      <h2>Парсинг триває у фоні</h2>
-      <p id="collection-loading-stage">Підключення до реєстру…</p>
-      <progress id="collection-loading-bar" max="100" aria-label="Хід парсингу"></progress>
-      <p id="collection-loading-count">Визначаємо кількість документів…</p>
-      <p id="collection-loading-eta">Орієнтовний час: оцінюємо…</p>
-      <small>Можна працювати з попередніми даними. Залишайте вкладку відкритою; нові результати з’являться після завершення збору. Час приблизний.</small>
-    </div>
-  </div>
-  <section class="collection-panel search-launcher" aria-label="Запуск пошуку">
+    <section class="collection-panel search-launcher" aria-label="Запуск пошуку">
     <h2>Пошук нових об’єктів</h2>
     <div class="collection-actions search-controls">
       <details id="region-picker" class="region-picker">
@@ -351,6 +322,42 @@
     <div id="collection-diagnostics" role="status" aria-live="polite"></div>
     <p id="collection-message" role="status">Готовий до пошуку. За замовчуванням обрана Львівська область.</p>
   </section>
+  <details class="advanced-tools">
+    <summary>Додаткові інструменти та знімки</summary>
+      <p class="collection-note">1. Оберіть області та запустіть парсер. 2. Збережіть результати. 3. Завантажте попередні результати нижче, щоб виключити їх із наступного пошуку. Залишайте вкладку відкритою під час збору.</p>
+      <button id="btn-force-refresh" type="button" class="secondary">Оновити дані</button>
+      <p id="data-refresh-message" role="status"></p>
+      <section class="collection-panel">
+        <h3>Виключити попередні результати</h3>
+        <label>Завантажити збережені JSON-файли <input id="exclusion-import" type="file" accept=".json,application/json" multiple></label>
+        <button id="exclusion-apply" type="button">Виключити з пошуку</button>
+        <button id="exclusion-clear" type="button" class="secondary">Скасувати виключення</button>
+        <p id="exclusion-message" role="status" aria-live="polite">Немає виключених записів.</p>
+      </section>
+      <details class="snapshots-panel" open>
+        <summary>Знімки парсингу та порівняння</summary>
+        <div class="snapshot-controls">
+          <button type="button" id="snapshot-save" disabled>Зберегти результати</button>
+          <label class="import-label">Імпортувати JSON-файли<input id="snapshot-import" type="file" accept=".json,application/json" multiple></label>
+          <label>Показувати<select id="snapshot-mode"><option value="live">Поточний парсер</option><option value="all">Усі обрані результати разом</option><option value="new">Лише нові відносно знімка</option><option value="changed">Лише змінені записи</option></select></label>
+          <label>Порівняти зі знімком<select id="snapshot-baseline"><option value="">Оберіть попередній знімок</option></select></label>
+          <label><input id="snapshot-include-live" type="checkbox" checked> Додавати актуальний парсер до порівняння</label>
+        </div>
+        <div id="snapshot-list"></div><p id="snapshot-message" role="status" aria-live="polite">Можна імпортувати кілька JSON-файлів. Номери документів використовуються для порівняння.</p>
+        <small>Знімки залишаються у цьому браузері. JSON-файл дозволяє відкрити їх через тиждень або на іншому пристрої.</small>
+      </details>
+  </details>
+  <div id="collection-loading" hidden class="collection-loading" role="status" aria-live="polite">
+    <div class="collection-loading-card">
+      <h2>Парсинг триває у фоні</h2>
+      <p id="collection-loading-stage">Підключення до реєстру…</p>
+      <progress id="collection-loading-bar" max="100" aria-label="Хід парсингу"></progress>
+      <p id="collection-loading-count">Визначаємо кількість документів…</p>
+      <p id="collection-loading-eta">Орієнтовний час: оцінюємо…</p>
+      <small>Можна працювати з попередніми даними. Залишайте вкладку відкритою; нові результати з’являться після завершення збору. Час приблизний.</small>
+    </div>
+  </div>
+
   <div id="dataset-label" class="dataset-label">Завантаження поточного збору…</div>
   <div id="category-tabs" class="category-tabs" role="tablist" aria-label="Типи об’єктів"></div>
   <section class="route-selection" aria-label="Обрані для маршруту">
