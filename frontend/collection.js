@@ -41,7 +41,7 @@
       try{
         const response=await fetch('/api/parser?'+new URLSearchParams(params),{cache:'no-store',signal:AbortSignal.timeout(35000)});
         let data;try{data=await response.json();}catch(_){const error=Error('Сервер пошуку повернув некоректну відповідь.');error.retryable=true;throw error;}
-        if(response.ok)return data;
+        if(response.ok){retryNotice?.remove?.();retryNotice=null;return data;}
         const error=Error(data.message||'Помилка реєстру.');
         error.retryable=data.retryable??(response.status===429||response.status>=500);
         error.code=data.code;error.advice=data.advice;error.source_url=data.source_url;
