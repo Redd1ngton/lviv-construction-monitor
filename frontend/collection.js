@@ -33,8 +33,9 @@
     if(error.source_url){const link=document.createElement('a');link.href=error.source_url;link.target='_blank';link.rel='noopener';link.textContent='Відкрити запит у реєстрі';entry.appendChild(link);}
     panel.appendChild(entry);
   }
+  let retryNotice=null;
   async function api(params){
-    let attempt=0,lastError,started=Date.now();
+    let attempt=0,started=Date.now();
     while(true){
       attempt++;
       try{
@@ -63,9 +64,8 @@
         const stage=$('collection-loading-stage');if(stage)stage.textContent=message;
         const panel=$('collection-diagnostics');
         if(panel){
-          let status=panel.querySelector?.('[data-retry-status]');
-          if(!status){status=document.createElement('p');status.dataset.retryStatus='true';status.setAttribute('role','status');panel.prepend(status);}
-          status.textContent=message;
+          if(!retryNotice){retryNotice=document.createElement('p');retryNotice.setAttribute?.('role','status');panel.appendChild(retryNotice);}
+          retryNotice.textContent=message;
         }
         await new Promise(resolve=>setTimeout(resolve,wait));
       }
