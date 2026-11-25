@@ -34,22 +34,42 @@
     panel.appendChild(entry);
   }
   async function api(params){
-    let lastError;
-    for(let attempt=0;attempt<3;attempt++){
+    let attempt=0,lastError,started=Date.now();
+    while(true){
+      attempt++;
       try{
         const response=await fetch('/api/parser?'+new URLSearchParams(params),{cache:'no-store',signal:AbortSignal.timeout(35000)});
-        let data;try{data=await response.json();}catch(_){throw Error('Сервер пошуку повернув некоректну відповідь.');}
+        let data;try{data=await response.json();}catch(_){const error=Error('Сервер пошуку повернув некоректну відповідь.');error.retryable=true;throw error;}
         if(response.ok)return data;
         const error=Error(data.message||'Помилка реєстру.');
-        error.retryable=data.retryable??(response.status===429||response.status>=500);error.code=data.code;error.advice=data.advice;error.source_url=data.source_url;throw error;
-      }catch(error){lastError=error;if(!error.advice)error.advice='Перевірте інтернет-з’єднання. Якщо сайт доступний, повторіть пошук пізніше: сервер або реєстр міг не відповісти вчасно.';if(error.retryable===false)throw error;}
-      if(attempt<2){
-        $('collection-message').textContent=`Реєстр не відповів. Повторна спроба ${attempt+2} із 3…`;
-        $('collection-loading-stage').textContent=`Очікуємо реєстр · повторна спроба ${attempt+2} із 3…`;
-        await new Promise(resolve=>setTimeout(resolve,3000*(attempt+1)));
+        error.retryable=data.retryable??(response.status===429||response.status>=500);
+        error.code=data.code;error.advice=data.advice;error.source_url=data.source_url;
+        error.retryAfter=data.retry_after_seconds;
+        throw error;
+      }catch(error){
+        lastError=error;
+        if(error.retryable===false)throw error;
+        // A network failure, timeout, 429 or upstream 5xx is transient:
+        // keep the exact same page/card request alive instead of skipping it.
+        const delay=Math.min(120000,5000*Math.pow(2,Math.min(attempt-1,5)));
+        const seconds=Math.max(1,Math.ceil((Number(error.retryAfter)||delay/1000)));
+        const wait=Math.min(120000,seconds*1000);
+        const elapsed=Math.floor((Date.now()-started)/1000);
+        const label=params.action==='list'
+          ? `сторінка ${params.page} · ${regions[params.region]||params.region}`
+          : params.action==='detail'?'картка '+params.id:'запит до реєстру';
+        const message=`Тимчасовий збій реєстру (${error.code||error.message}). Не пропускаю ${label}. Спроба ${attempt}; наступна через ${Math.ceil(wait/1000)} с · очікування ${elapsed} с.`;
+        $('collection-message').textContent=message;
+        const stage=$('collection-loading-stage');if(stage)stage.textContent=message;
+        const panel=$('collection-diagnostics');
+        if(panel){
+          let status=panel.querySelector?.('[data-retry-status]');
+          if(!status){status=document.createElement('p');status.dataset.retryStatus='true';status.setAttribute('role','status');panel.prepend(status);}
+          status.textContent=message;
+        }
+        await new Promise(resolve=>setTimeout(resolve,wait));
       }
     }
-    throw lastError;
   }
   function loadingView(state){
     const known=state.counts.size===state.regionCount&&[...state.counts.values()].every(Number.isFinite);
