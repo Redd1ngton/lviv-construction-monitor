@@ -37,7 +37,9 @@ export async function onRequest({request}){
       const status=response.status;
       const code=status===429?'RATE_LIMIT':status===401||status===403?'ACCESS_DENIED':status===404?'NOT_FOUND':status>=500?'REGISTRY_FAILURE':'REQUEST_REJECTED';
       const advice=code==='RATE_LIMIT'?'Реєстр обмежив частоту запитів. Зачекайте кілька хвилин і повторіть пошук.':code==='ACCESS_DENIED'?'Реєстр відмовив у доступі серверу. Зміна фільтрів не усуне цю причину.':code==='NOT_FOUND'?'Сторінка або картка відсутня. Потрібно перевірити адресу джерела.':code==='REGISTRY_FAILURE'?'Збій на боці реєстру. Повторіть пошук пізніше; причина не підтверджує помилку фільтрів.':'Реєстр відхилив запит. Потрібно перевірити параметри запиту.';
-      return json({code,advice,source_url:target,upstream_status:status,retryable:status===429||status>=500,message:`Реєстр повернув HTTP ${status}.`},status===429?429:502);
+      const retryAfter=response.headers.get('Retry-After');
+      const retryAfterSeconds=retryAfter?(Number.isFinite(Number(retryAfter))?Math.max(1,Number(retryAfter)):Math.max(1,Math.ceil((Date.parse(retryAfter)-Date.now())/1000))):null;
+      return json({code,advice,source_url:target,upstream_status:status,retryable:status===429||status>=500,retry_after_seconds:retryAfterSeconds,message:`Реєстр повернув HTTP ${status}.`},status===429?429:502);
     }
     if(p.get('action')==='parcel'){
       const payload=await response.json(),coords=payload?.centroid?.coordinates;
