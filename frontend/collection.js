@@ -153,8 +153,20 @@
     finally{$('collection-loading').hidden=true;running=false;draw();$('collection-launch').disabled=false;}
   }
   async function init(){
-    try{const r=await fetch('./regions.json');if(!r.ok)throw Error();regions=await r.json();selected=new Set([...selected].filter(k=>k in regions));draw();}
-    catch(_){$('collection-message').textContent='Не вдалося завантажити області. Оновіть сторінку.';return;}
+    try{
+      const response=await fetch('/regions.json',{cache:'no-store',signal:AbortSignal.timeout(10000)});
+      if(!response.ok)throw Error(`HTTP ${response.status}`);
+      const data=await response.json();
+      if(!data||typeof data!=='object'||Array.isArray(data)||!Object.keys(data).length)throw Error('Список областей порожній або має неправильний формат.');
+      regions=data;
+      selected=new Set([...selected].filter(k=>k in regions));
+      if(!selected.size&&regions.lviv)selected.add('lviv');
+      draw();
+    }catch(error){
+      $('collection-message').textContent=`Не вдалося завантажити області (${error.message}). Перевірте з’єднання та оновіть сторінку.`;
+      $('collection-launch').disabled=true;
+      return;
+    }
     $('collection-all').addEventListener('click',()=>{if(!running){selected=new Set(Object.keys(regions));draw();}});
     $('collection-clear').addEventListener('click',()=>{if(!running){selected.clear();draw();}});
     $('collection-launch').addEventListener('click',start);
