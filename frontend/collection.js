@@ -11,7 +11,8 @@
       input.addEventListener('change',()=>{input.checked?selected.add(key):selected.delete(key);draw();});
       label.append(input,document.createTextNode(name));$('region-checks').appendChild(label);
     }
-    $('collection-count').textContent=`Обрано областей: ${selected.size}`;
+    const count=$('collection-count');
+    if(count)count.textContent=`Обрано областей: ${selected.size}`;
     const summary=$('region-picker-summary');
     if(summary){
       const names=[...selected].map(key=>regions[key]).filter(Boolean);
